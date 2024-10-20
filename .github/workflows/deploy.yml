@@ -1,10 +1,14 @@
 name: Deploy to GitHub Pages
 
 on:
-  # 每次推送到 `main` 分支时触发这个“工作流程”
+  # Trigger the workflow every time you push to the `main` branch
+  # Using a different branch name? Replace `main` with your branch’s name
   push:
-    branches: [ main ]
+    branches: [main]
+  # Allows you to run this workflow manually from the Actions tab on GitHub.
+  workflow_dispatch:
 
+# Allow this job to clone the repo and create a page deployment
 permissions:
   contents: read
   pages: write
@@ -16,26 +20,20 @@ jobs:
     steps:
       - name: Checkout your repository using git
         uses: actions/checkout@v4
-
-      # 安装 Node.js
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Install, build, and upload your site output
+        uses: withastro/action@v2
         with:
-          node-version: 18
+          path: . # The root location of your Astro project inside the repository. (optional)
+          node-version: 18 # The specific version of Node that should be used to build your site. Defaults to 18. (optional)
+          package-manager: pnpm@latest # The Node package manager that should be used to install dependencies and build your site. Automatically detected based on your lockfile. (optional)
 
-      # 清理 npm 缓存（可选，但推荐用来解决缓存问题）
-      - name: Clear npm cache
-        run: npm cache clean --force
-
-      # 安装依赖，包括 Astro
-      - name: Install dependencies
-        run: npm install
-
-      # 构建 Astro 站点
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          folder: build
-        env:
-          ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
-          BUILD_SCRIPT: npm install && npm run build
+        id: deployment
+        uses: actions/deploy-pages@v4
