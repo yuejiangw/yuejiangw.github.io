@@ -1,2 +1,3 @@
 /// <reference path="../.astro/types.d.ts" />
-/// <reference types="astro/client" />
+/// <system-design path="../.astro/types.d.ts" />
+/// <system-design types="astro/client" />

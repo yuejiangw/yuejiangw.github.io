@@ -13,19 +13,45 @@ export default defineConfig({
 			},
 			sidebar: [
 				{
-					label: 'Guides',
+					label: 'Java',
+					autogenerate: { directory: 'java/' }
+				},
+				{
+					label: 'Algorithm',
+					autogenerate: { directory: 'algorithm/' },
+				},
+				{
+					label: 'Database',
 					items: [
-						// Each item here is one entry in the navigation menu.
-						{ label: 'Example Guide', slug: 'guides/example' },
-					],
+						{
+							label: 'MySQL',
+							autogenerate: { directory: 'mysql/' },
+						},
+						{
+							label: 'MongoDB',
+							autogenerate: { directory: 'mongo/' },
+						},
+						{
+							label: 'Redis',
+							autogenerate: { directory: 'redis/' },
+						}
+					]
 				},
 				{
-					label: 'Reference',
-					autogenerate: { directory: 'reference' },
+					label: 'Rabbit MQ',
+					autogenerate: { directory: 'rabbit-mq' },
 				},
 				{
-					label: 'RabbitMQ',
-					autogenerate: { directory: 'RabbitMQ' },
+					label: 'Elasticsearch',
+					autogenerate: { directory: 'elasticsearch/' },
+				},
+				{
+					label: 'System Design',
+					autogenerate: { directory: 'system-design/' },
+				},
+				{
+					label: 'Bug',
+					autogenerate: { directory: 'bug/' },
 				},
 			],
 		}),
