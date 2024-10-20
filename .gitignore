@@ -1,0 +1,31 @@
+### Astro template
+# Gitignore template for Astro projects
+# Ignore content collection generated files
+.astro
+
+### Example user template template
+### Example user template
+
+# IntelliJ project files
+.idea
+*.iml
+out
+gen
+### react template
+.DS_*
+*.log
+logs
+**/*.backup.*
+**/*.back.*
+
+node_modules
+bower_components
+
+*.sublime*
+
+psd
+thumb
+sketch
+.DS_Store
+.vscode/
+
