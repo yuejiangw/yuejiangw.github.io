@@ -33,8 +33,9 @@ jobs:
 
       # 构建 Astro 站点
       - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4.6.8
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: build
         env:
           ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
-            FOLDER: build
-            BUILD_SCRIPT: npm install && npm run build
+          BUILD_SCRIPT: npm install && npm run build
