@@ -4,8 +4,6 @@ on:
   # 每次推送到 `main` 分支时触发这个“工作流程”
   push:
     branches: [ main ]
-  # 允许你在 GitHub 上的 Actions 标签中手动触发此“工作流程”
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -34,16 +32,9 @@ jobs:
         run: npm install
 
       # 构建 Astro 站点
-      - name: Build Astro site
-        run: npm run build
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
       - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+        uses: JamesIves/github-pages-deploy-action@v4.6.8
+        env:
+          ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+            FOLDER: build
+            BUILD_SCRIPT: npm install && npm run build
