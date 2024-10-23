@@ -18,22 +18,27 @@ export default defineConfig({
 				},
 				{
 					label: 'Algorithm',
-					autogenerate: { directory: 'algorithm/' },
+					items: [
+						{
+							label: 'LeetCode',
+							autogenerate: { directory: 'algorithm/leetcode' },
+						}
+					]
 				},
 				{
 					label: 'Database',
 					items: [
 						{
 							label: 'MySQL',
-							autogenerate: { directory: 'mysql/' },
+							autogenerate: { directory: 'database/mysql' },
 						},
 						{
 							label: 'MongoDB',
-							autogenerate: { directory: 'mongo/' },
+							autogenerate: { directory: 'database/mongo' },
 						},
 						{
 							label: 'Redis',
-							autogenerate: { directory: 'redis/' },
+							autogenerate: { directory: 'database/redis' },
 						}
 					]
 				},
@@ -47,7 +52,12 @@ export default defineConfig({
 				},
 				{
 					label: 'System Design',
-					autogenerate: { directory: 'system-design/' },
+					items: [
+						{
+							label: '数据密集型应用',
+							autogenerate: { directory: 'system-design/ddia' },
+						}
+					]
 				},
 				{
 					label: 'Bug',
