@@ -17,13 +17,8 @@ export default defineConfig({
 					autogenerate: { directory: 'java/' }
 				},
 				{
-					label: 'Algorithm',
-					items: [
-						{
-							label: 'LeetCode',
-							autogenerate: { directory: 'algorithm/leetcode' },
-						}
-					]
+					label: 'LeetCode',
+					autogenerate: { directory: 'leetcode/' }
 				},
 				{
 					label: 'Database',
