@@ -1,22 +1,17 @@
 ---
-layout: post
 title: Redis 学习笔记 - 实战篇
-categories: [Learn]
 description: 黑马程序员 Redis 教程学习笔记
-keywords: Redis, Learn
 ---
 
 > 课程链接：[bilibili](https://www.bilibili.com/video/BV1cr4y1671t?)
+> 
+> 项目：[黑马点评](https://github.com/yuejiangw/redis-learn/tree/main/hm-dianping)
 
-# 项目 - 黑马点评
-
-> 项目地址：[Github](https://github.com/226wyj/redis-learn/tree/main/hm-dianping)
-
-![](/images/blog/redis/action/intro.png)
+![](/images/redis/action/intro.png)
 
 项目架构
 
-![](/images/blog/redis/action/architecture.png)
+![](/images/redis/action/architecture.png)
 
 ## 共享 Session（单点登录）
 
@@ -26,17 +21,17 @@ keywords: Redis, Learn
 
 (1) 基于 Session 实现短信登录
 
-![](/images/blog/redis/action/login/session-login-workflow.png)
+![](/images/redis/action/login/session-login-workflow.png)
 
 (2) 基于登录校验拦截器进行验证
 
-![](/images/blog/redis/action/login/interceptor.png)
+![](/images/redis/action/login/interceptor.png)
 
 **问题**
 
 Session 共享问题：多台 Tomcat 并不共享 session 存储空间，当请求切换到不同的 tomcat 服务器时候导致数据丢失
 
-![](/images/blog/redis/action/login/session-share-issue.png)
+![](/images/redis/action/login/session-share-issue.png)
 
 虽然 Tomcat 支持 session 拷贝，但存在延迟，因此并未广泛使用。Session 的替代方案应满足：
 
@@ -60,7 +55,7 @@ string 还是 hash？有两种方案：
 
 因为用户信息是对象，我们这里选择 hash 类型作为 value 的类型，占用的内存更少、且支持对单个字段的增删改查。具体流程如下：
 
-![](/images/blog/redis/action/login/redis-login-workflow.png)
+![](/images/redis/action/login/redis-login-workflow.png)
 
 Redis 代替 session 需要考虑的问题：
 
@@ -72,7 +67,7 @@ Redis 代替 session 需要考虑的问题：
 
 之前我们的拦截器只会拦截需要访问用户信息的 URL，如果用户一直在操作无需访问个人信息的 URL 如主页，则拦截器就不会刷新 Redis，从而导致登录失效。解决办法是在登录拦截器前再加一个拦截器，用来拦截一切路径，其作用是负责刷新 token 有效期。
 
-![](/images/blog/redis/action/login/interceptor-optimization.png)
+![](/images/redis/action/login/interceptor-optimization.png)
 
 ## 缓存
 
@@ -80,7 +75,7 @@ Redis 代替 session 需要考虑的问题：
 
 **什么是缓存？**
 
-![](/images/blog/redis/action/cache/cache.png)
+![](/images/redis/action/cache/cache.png)
 
 缓存作用
 
@@ -97,11 +92,11 @@ Redis 代替 session 需要考虑的问题：
 
 流程
 
-![](/images/blog/redis/action/cache/cache-workflow.png)
+![](/images/redis/action/cache/cache-workflow.png)
 
 缓存更新策略
 
-![](/images/blog/redis/action/cache/cache-update.png)
+![](/images/redis/action/cache/cache-update.png)
 
 业务场景
 
@@ -130,7 +125,7 @@ Cache Aside 是最常用的方式
 
 关于缓存和数据库的操作顺序，可能存在如下问题：
 
-![](/images/blog/redis/action/cache/cache-aside-problem.png)
+![](/images/redis/action/cache/cache-aside-problem.png)
 
 上面两种方案中，最终我们选择右边的方案，也就是先操作数据库再删除缓存。因为如果出现图中的问题，线程 2 需要在线程 1 更新数据库的这一段很短的时间内就完成数据库的写操作，这种事情发生的可能性很低，因为写缓存是在内存中，一般速度很快。
 
@@ -140,19 +135,25 @@ Cache Aside 是最常用的方式
 
 #### 缓存穿透 - Cache Penetration
 
-攻击者可以恶意请求数据库中不存在的数据，从而使得每次查询都要绕过缓存查数据库，增大数据库的压力。
+客户端请求的数据在缓存中和数据库中都不存在，这样缓存永远不会生效，这些请求都会打到数据库，增大数据库的压力。
 
 解决方案：
 
 - 缓存空值：缓存一个空值并设置 TTL
+  - 优点：实现简单，维护方便
+  - 缺点：额外的内存消耗、可能造成短期的不一致
 - 布隆过滤：在客户端和 Redis 中间加一个布隆过滤器，每次查询前会询问过滤器数据是否存在，如果不存在会直接拒绝请求，阻止继续向下查询
+  - 优点：内存占用少，没有多余的 key
+  - 缺点：实现复杂、存在误判可能
 
-![](/images/blog/redis/action/cache/cache-penetration.png)
+![](/images/redis/action/cache/cache-penetration.png)
 
 预防做法：
 
+- 缓存 `null` 值
+- 布隆过滤
 - 增强对请求数据的校验，比如 `id > 0`
-- 增强对数据格式的控制，比如 id 设置为 10 位，不为 10 位的直接拒绝
+- 增强对数据格式的控制，比如 `id` 设置为 10 位，不为 10 位的直接拒绝
 - 增强用户权限校验
 - 通过限流来保护数据库
 
@@ -162,28 +163,39 @@ Cache Aside 是最常用的方式
 
 解决思路：
 
-- 不让 key 同时失效
-- 尽量不让 Redis 宕机
+- 给不同的 key 的 TTL 添加随机值，不让 key 同时失效
+- 尽量不让 Redis 宕机（高可用集群）
+- 给缓存业务添加降级限流的策略
+- 给业务添加多级缓存
 
-![](/images/blog/redis/action/cache/cache-avalanche.png)
+![](/images/redis/action/cache/cache-avalanche.png)
 
 #### 缓存击穿 - Hotspot Invalid
 
-也叫热点 key 失效问题
+也叫热点 key 失效问题，一个被高并发访问并且缓存重建业务较复杂的 key 突然失效了，无数的请求会在瞬间给数据库带来巨大冲击
 
-![](/images/blog/redis/action/cache/hotspot-invalid.png)
+一般发生在某个商品做活动的场景下
+
+![](/images/redis/action/cache/hotspot-invalid.png)
 
 两种解决方案：
 
-- 互斥锁：只有一个线程会负责缓存重建，其他拿不到锁的线程必须等待
+- 互斥锁
+  - 只有一个线程会负责缓存重建，其他拿不到锁的线程必须等待
+  - 问题：性能比较差，同一时间只有一个线程可以进行缓存重建
+  - 借助 `setnx` 命令获取锁，成功返回 1，失败返回 0
+  - 借助 `del` 命令释放锁
 - 逻辑过期
+  - 在插入 Redis 的时候不设置 TTL，而是设置一个 expire 字段代表预计的过期时间（比如，可以设置为活动结束之后的 timestamp）
+  - 在查询 Redis 的时候由程序进行逻辑判断。如果发现缓存失效，则新开一个线程，获取互斥锁，进行缓存重建，同时返回过期结果
+  - 由于使用了互斥锁，因此同一时间只会有一个线程负责缓存重建，直接返回过期结果确保不会由线程阻塞引起性能低下
 
-![](/images/blog/redis/action/cache/hotspot-invalid-solution.png)
+![](/images/redis/action/cache/hotspot-invalid-solution.png)
 
 两种方式都使用了互斥锁来降低缓存重建的开销，方案优缺点对比如下：
 
-![](/images/blog/redis/action/cache/solution-compare.png)
+![](/images/redis/action/cache/solution-compare.png)
 
 可以将上述两种方式封装成一个缓存工具类：
 
-![](/images/blog/redis/action/cache/cache-tool.png)
+![](/images/redis/action/cache/cache-tool.png)
