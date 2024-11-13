@@ -190,6 +190,20 @@ Cache Aside 是最常用的方式
   - 在查询 Redis 的时候由程序进行逻辑判断。如果发现缓存失效，则新开一个线程，获取互斥锁，进行缓存重建，同时返回过期结果
   - 由于使用了互斥锁，因此同一时间只会有一个线程负责缓存重建，直接返回过期结果确保不会由线程阻塞引起性能低下
 
+加锁 / 释放锁代码片段
+
+```java
+private boolean tryLock(String key) {
+    Boolean flag = stringRedisTemplate.opsForValue().setIfAbsent(key, "1", 10, TimeUnit.SECONDS);
+    return BooleanUtil.isTrue(flag);
+}
+
+private void unlock(String key) {
+    stringRedisTemplate.delete(key);
+}
+```
+
+
 ![](/images/redis/action/cache/hotspot-invalid-solution.png)
 
 两种方式都使用了互斥锁来降低缓存重建的开销，方案优缺点对比如下：
@@ -199,3 +213,124 @@ Cache Aside 是最常用的方式
 可以将上述两种方式封装成一个缓存工具类：
 
 ![](/images/redis/action/cache/cache-tool.png)
+
+## 优惠券秒杀
+
+### 全局 ID 自增
+
+每个店铺都可以发布优惠券，订单表如果使用数据库自增 ID 就会存在一些问题：
+
+- id 的规律性太明显，容易暴露信息
+- 受表单数据量的限制可能需要分表，无法保证全局唯一 ID
+
+全局 ID 生成器，是一种在分布式系统下用来生成全局唯一 ID 的工具，一般要满足下列特性：
+
+- 唯一性
+- 高可用
+- 高性能
+- 递增性
+- 安全性
+
+常见的全局唯一 ID 生成策略
+
+- UUID
+- Redis 自增
+- snowflake 算法（雪花算法，Twitter 发明的，依赖于时钟）
+- 数据库自增
+
+Redis 自增 ID 策略
+
+- 时间戳 + 计数器（为了增加 ID 的安全性，我们可以不直接使用 Redis 自增的数值，而是拼接一些其他信息）
+- 每天一个 key，方便统计订单量
+
+![](/images/redis/action/voucher/unique-id.png)
+
+代码
+
+```java
+public long nextId(String keyPrefix) {
+    // 1. 生成时间戳
+    LocalDateTime now = LocalDateTime.now();
+    long nowSecond = now.toEpochSecond(ZoneOffset.UTC);
+    long timestamp = nowSecond - BEGIN_TIMESTAMP;
+
+    // 2. 生成序列号，由于序列号只有32位，因此不能所有业务都用同一个 key，要加上日期进行区分，也便于后续统计
+    // 2.1 获取当前日期，精确到天
+    String date = now.format(DateTimeFormatter.ofPattern("yyyy:MM:dd"));
+    // 2.2 自增长
+    long count = stringRedisTemplate.opsForValue().increment("icr:" + keyPrefix + ":" + date);
+
+    // 3. 拼接并返回，借助位运算
+    return timestamp << COUNT_BITS | count ;
+}
+```
+
+### 实现优惠券秒杀下单
+
+下单时需要判断两点
+
+- 秒杀是否开始或结束，如果尚未开始或者已经结束则无法下单
+- 库存是否充足，不足则无法下单
+
+![](/images/redis/action/voucher/workflow.png)
+
+### 超卖问题
+
+在高并发场景下，我们无法控制线程的执行顺序，从而会导致并发安全问题。
+
+![](/images/redis/action/voucher/over-sell.png)
+
+超卖问题就是典型的多线程安全问题，针对这一问题常见的解决方案是加锁
+
+- 悲观锁 ❌
+  - 认为线程安全问题一定会发生，因此在操作数据之前先获取锁，确保线程串行执行
+  - 例如：synchronized, lock 都属于悲观锁
+  - 效率低，不适用于高并发场景
+- 乐观锁 ✅
+  - 认为线程安全问题不一定会发生，因此不加锁，只是在更新数据时去判断有没有其他线程对数据做了修改
+  - 如果没有修改则认为是安全的，自己才更新数据
+  - 如果已经被其他线程修改说明发生了安全问题，此时可以重试或异常
+  - 成功率太低，即使没有超卖也会发生扣减失败的情况
+
+乐观锁的关键是判断之前查询得到的数据是否有被修改过，常见的方式有两种
+
+**版本号法**
+
+- 表中新增一列，为版本号，用来标识数据是否变化
+- 在查数据的同时查询版本号
+- 在扣减的之前判断当前版本号是否等于上一步中查询出来的版本号 
+  - 如果相等，说明没有其他线程影响，扣减库存并将版本号加1 
+  - 如果不相等，说明有其他线程早于自己对数据库进行了修改，需要丢弃后续操作
+
+![](/images/redis/action/voucher/version-number.png)
+
+**CAS 法**
+
+- Compare and Set
+- 在上一个方法中，版本号只有在发生扣减库存的时候才会更新，那么我们可以在执行扣减操作之前直接判断当前库存是否等于我最初拿到的库存，从而得知是否有其他线程已经进行了更新
+
+![](/images/redis/action/voucher/cas.png)
+
+**CAS 法优化**
+
+原有的思路用代码描述如下
+
+```java
+boolean success = seckillVoucherService.update()
+        .setSql("stock = stock - 1")
+        .eq("voucher_id", voucherId)
+        .eq("stock", voucher.getStock())    // CAS 乐观锁判断
+        .update();
+```
+
+这样做有一个问题，即，就算我们没有超卖，也会因为高并发条件下由于获取 stock 数目不一致而导致报错，从而使成功率大大降低。优化后的方案为：
+
+```java
+boolean success = seckillVoucherService.update()
+        .setSql("stock = stock - 1")
+        .eq("voucher_id", voucherId)
+        .gt("stock", 0)    // CAS 乐观锁判断
+        .update();
+```
+
+从判断库存是否相等，改为只限制库存大于 0 即可
