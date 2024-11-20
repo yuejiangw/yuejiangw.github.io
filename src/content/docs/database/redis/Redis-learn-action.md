@@ -345,7 +345,42 @@ boolean success = seckillVoucherService.update()
 
 - 单机情况下，可以通过 `synchronized` 关键字来加锁
 - 集群情况下不行，锁的原理是在 JVM 内部维护了一个锁监视器，而集群环境下各个节点有自己独立的 JVM，所以在每个 JVM 的内部都会有一个线程是成功的
-  - 需要想办法实现跨 JVM（进程）的锁
+  - 需要想办法实现跨 JVM（进程）的锁，也就是分布式锁
 
 ![](/images/redis/action/voucher/problem.png)
 
+### 分布式锁
+
+满足分布式系统或集群模式下多进程可见且互斥的锁
+
+![](/images/redis/action/voucher/lock.png)
+
+基本特性
+
+- 多进程可见
+- 互斥
+- 高可用
+- 高性能
+- 安全性
+
+#### 基于 Redis 的分布式锁
+
+获取锁
+
+- 添加锁，利用 setnx 的互斥特性 
+- 添加锁过期时间，避免服务宕机引起的死锁
+- 上述两个步骤合在一起做保证原子性
+
+```
+SET lock thread1 EX 10 NX
+```
+
+释放锁
+
+- 释放锁，删除即可
+
+```
+DEL key
+```
+
+![](/images/redis/action/voucher/lock-acquire.png)
