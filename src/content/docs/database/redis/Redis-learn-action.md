@@ -384,3 +384,70 @@ DEL key
 ```
 
 ![](/images/redis/action/voucher/lock-acquire.png)
+
+代码示例
+
+```java
+public boolean tryLock(long timeoutSec) {
+    // 获取当前线程标识
+    long threadId = Thread.currentThread().getId();
+    // 获取锁
+    Boolean success = stringRedisTemplate.opsForValue().setIfAbsent(KEY_PREFIX + name, String.valueOf(threadId), timeoutSec, TimeUnit.SECONDS);
+    // 自动拆箱的时候判断空指针
+    return Boolean.TRUE.equals(success);
+}
+
+public void unlock() {
+    stringRedisTemplate.delete(KEY_PREFIX + name);
+}
+```
+
+缺点
+
+- 极端情况下，线程 1 拿到锁之后有可能阻塞的时间过长超过了 timeout，从而导致锁被自动释放了
+- 这时线程 2 可以拿到锁并开始执行自己业务，一段时间后线程 1 的业务执行完毕，执行释放锁的操作
+- 由于在释放锁的过程中不加任何判断，因此线程 1 会释放掉线程 2 的锁
+- 这样一来，其他线程就可以拿到锁了，从而产生了线程安全问题。
+
+解决办法
+
+- 获取锁的时候要加入线程标识
+- 在释放锁的时候对线程 id 加以判断，确保释放的是自己申请的锁
+  - 还要保证判断和锁释放这两个过程是原子性的，否则有可能在判断结束释放锁之前的时间节点发生阻塞，而导致释放了其他线程的锁
+  - 实现：Lua 脚本（在一个脚本中编写多条 Redis 命令，确保多条命令执行时的原子性）
+
+#### Lua 脚本
+
+调用脚本的常见命令
+
+```shell
+EVAL "return redis.call('set', 'name', 'jack)" 0
+```
+
+如果脚本中的 key, value 不想写死，可以作为参数传递。key 类型参数会放入 KEYS 数组，其他参数会放入 ARGV 数组，在脚本中可以从 KEYS 和 ARGV 数组获取这些参数
+
+```shell
+EVAL return "redis.call('set', KEYS[1], ARGV[1])" 1 name Rose
+
+# Lua 中数组下标是从 1 开始的
+# 'set' 是脚本内容
+# 1 代表脚本需要的 key 类型的参数个数
+```
+
+再次回顾释放锁的业务流程
+
+1. 获取锁中的线程标识
+2. 判断是否与指定的标识一致
+3. 如果一致则释放锁
+4. 如果不一致则什么都不做
+
+最终脚本如下
+
+```redis
+-- 获取锁中的线程标识 get key, 比较线程标识与锁中的标识是否一致
+if redis.call('get', KEYS[1]) == ARGV[1]) then
+  -- 释放锁 del key
+  return redis.call('del', KEYS[1])
+end
+return 0
+```
