@@ -451,3 +451,162 @@ if redis.call('get', KEYS[1]) == ARGV[1]) then
 end
 return 0
 ```
+
+通过 Java 来调用 lua 脚本要借助 `execute` 方法
+
+```java
+private static final DefaultRedisScript<Long> UNLOCK_SCRIPT;
+
+static {
+    UNLOCK_SCRIPT = new DefaultRedisScript<>();
+    UNLOCK_SCRIPT.setLocation(new ClassPathResource("unlock.lua"));
+    UNLOCK_SCRIPT.setResultType(Long.class);
+}
+
+@Override
+public void unlock() {
+    // 调用 lua 脚本
+    stringRedisTemplate.execute(UNLOCK_SCRIPT, Collections.singletonList(KEY_PREFIX + name), ID_PREFIX + Thread.currentThread().getId());
+}
+```
+
+## 基于 Redis 的分布式锁的优化
+
+### 目前问题
+
+**首先来回顾一下基于 Redis 实现分布式锁的基本思路**
+
+- 利用 `set nx ex` 获取锁，并设计过期时间，保存线程标识
+- 释放锁时先判断线程标识是否与自己一致，一致则删除锁
+
+特性
+
+- 利用 `set nx` 满足互斥行
+- 利用 `set ex` 保证故障时锁依然能够释放，避免死锁，提高安全性
+- 利用 Redis 集群保证高可用和高并发特性
+
+**基于 `setnx` 的分布式锁存在以下问题**
+
+1. 不可重入：同一个线程无法多次获取同一把锁
+2. 不可重试：获取锁只尝试一次就返回 false，没有重试机制
+3. 超时释放：锁超时释放虽然可以避免死锁，但如果业务执行耗时较长，也会导致锁释放，存在安全隐患
+4. 主从一致性：如果 Redis 提供了主从集群，且主从同步存在延迟。极端情况下，一个线程在主节点上获取了锁之后主节点发生了宕机，但此时从节点还未同步主节点上的锁信息，从而可能导致其他线程也可以获取到锁
+
+### Redisson 简介
+
+Redisson 是一个在 Redis 基础上实现的 Java 驻内存数据网格（in-memory data grid），它不仅提供了一系列的分布式的 Java 常用对象，还提供了许多分布式服务，其中就包含了各种分布式锁的实现
+
+添加依赖 
+
+```java
+<dependency>
+    <groupId>org.redisson</groupId>
+    <artifactId>redisson</artifactId>
+    <version>3.13.6</version>
+</dependency>
+```
+
+配置（这里建议单独配置 RedissonClient 而不是使用 SpringBoot Starter，因为后者会覆盖已有的 Redis Starter，而我们只想用 Redisson 中的分布式锁）
+
+```java
+@Configuration
+public class RedissonConfig {
+    @Bean
+    public RedissonClient redissonClient() {
+        // 配置
+        Config config = new Config();
+        config.useSingleServer().setAddress("127.0.0.1:6379").setPassword("123456");
+        // 创建 client 对象
+        return Redisson.create(config);
+    }
+}
+```
+
+使用
+
+```java
+public class Test {
+  @Resource
+  private RedissonClient redissonClient;
+
+  @Test
+  void testRedisson() throws InterruptedException {
+    // 获取锁（可重入），指定锁的名称
+    RLock lock = redissonClient.getLock("anyLock");
+    // 尝试获取锁, 参数分别是：获取锁的最大等待时间（期间会重试），锁自动释放时间，时间单位
+    boolean isLock = lock.tryLock(1, 10, TimeUnit.SECONDS);
+    // 判断锁释放获取成功
+    if (isLock) {
+      try {
+        System.out.println("执行业务");
+      } finally {
+        lock.unlock();
+      }
+    }
+  }    
+}
+```
+
+### Redisson 可重入锁原理
+
+在获取锁的时候加一步判断，查看是不是当前线程正在占有锁，其核心是利用 Redis 中的 hash 结构来存储线程标识和重入次数
+
+- 同一线程内的方法获取锁时，重入次数 + 1
+- 同一线程内的方法释放锁时，重入次数 - 1
+- 当线程内所有方法都执行完毕之后，重入次数一定是 0，此时可以在 Redis 中释放锁
+
+![](/images/redis/action/voucher/reentrant-lock.png)
+
+获取锁的 lua 脚本
+
+```lua
+local key = KEYS[1];
+local threadId = ARGV[1];
+local releaseTime = ARGV[2];
+
+-- 判断锁是否存在
+if (redis.call('exisits', key) == 0) then
+  redis.call('hset', key, threadId, '1');
+  redis.call('expire', key, releaseTime);
+  return 1;
+end;
+
+-- 锁已经存在，判断 threadId 是否是自己
+if (redis.call('hexists', key, threadId) == 1) then
+  -- 不存在，获取锁，重入次数 +1
+  redis.call('hincrby', key, threadId, '1');
+  -- 设置有效期
+  redis.call('expire', key, releaseTime);
+end;
+
+-- 获取锁的不是自己，获取锁失败
+return 0;
+```
+
+释放锁的 lua 脚本
+
+```lua
+local key = KEYS[1];
+local threadId = ARGV[1];
+local releaseTime = ARGV[2];
+
+-- 判断当前锁是否是被自己持有
+if (redis.call('hexisits', key, threadId) == 0) then
+  -- 不是自己，直接返回
+  return nil;
+end;
+
+-- 是自己的锁，则重入次数 -1
+local count = redis.call('hincrby', key, threadId, -1);
+-- 判断重入次数是否已经为 0
+if (count > 0) then
+  -- 大于 0 则不能释放锁，重置有效期然后返回
+  redis.call('expire', key, releaseTime);
+  return nil
+else
+  -- 等于 0 说明可以释放锁
+  redis.call('del', key);
+  return nil;
+end;
+```
+
