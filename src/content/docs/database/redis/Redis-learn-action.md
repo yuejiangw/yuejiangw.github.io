@@ -547,7 +547,9 @@ public class Test {
 }
 ```
 
-### Redisson 可重入锁原理
+### Redisson 锁原理
+
+#### 可重入原理 - p66
 
 在获取锁的时候加一步判断，查看是不是当前线程正在占有锁，其核心是利用 Redis 中的 hash 结构来存储线程标识和重入次数
 
@@ -610,3 +612,47 @@ else
 end;
 ```
 
+#### 总结 - p67
+
+- 可重入：利用 hash 结构记录线程 id 和重入次数
+- 可重试：利用信号量和 PubSub 功能实现等待、唤醒、获取锁失败的重试机制
+- 超时续约：利用 watchDog，每隔一段时间（releaseTime / 3），重置超时时间
+
+![](/images/redis/action/voucher/redisson.png)
+
+### Redisson 分布式锁主从一致性问题
+
+没有主从概念，把所有 Redis 节点都看做独立节点，都可以进行读写。获取锁的时候必须向多个 Redis 节点获取锁，只有每一个节点都拿到锁才视为获取锁成功。这种方案在 Redisson 中称为 multilock（联锁）
+
+```java
+void setUp() {
+    RLock lock1 = redissonClient.getLock("order");
+    RLock lock2 = redissonClient.getLock("order");
+    RLock lock3 = redissonClient.getLock("order");
+    
+    // 创建联锁 multilock，它的使用方式和单独的 lock 没有区别
+    lock = redissonClient.getMultiLock(lock1, lock2, lock3);
+}
+```
+
+## 异步秒杀
+
+首先来回顾先前的秒杀流程
+
+![](/images/redis/action/voucher/original-seckill.png)
+
+可以发现，在查询优惠券、查询订单、减库存、创建订单这四步中都要访问数据库，而数据库本身的并发能力比较差，因此现有的秒杀流程性能是不高的
+
+**优化思路**
+
+判断秒杀库存和校验一人一单这两部分耗时是较短的，可以分离出来由一个线程独立完成，另外的四个步骤交给另外一个线程来做
+
+- 订单信息可以存储在 Redis 中，借助 Redis 完成库存判断和一人一单校验，之后保存优惠券 id，用户 id，和订单 id 到阻塞队列
+- 另外的线程异步读取阻塞队列中的信息，完成下单处理
+- 关于 Redis 数据结构，库存信息通过 int 类型存储，一人一单校验通过 set 类型存储
+
+![](/images/redis/action/voucher/updated-seckill.png)
+
+**优化后的流程**
+
+![](/images/redis/action/voucher/updated-workflow.png)
