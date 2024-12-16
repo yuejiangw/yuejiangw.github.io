@@ -656,3 +656,114 @@ void setUp() {
 **优化后的流程**
 
 ![](/images/redis/action/voucher/updated-workflow.png)
+
+基于阻塞队列的异步秒杀存在的问题
+
+- 内存限制问题：阻塞队列存在于内存中，可存放的数据量受 JVM 内存的限制
+- 数据安全问题：服务突然宕机了，内存中的所有信息都会丢失
+
+### Redis 消息队列实现异步秒杀
+
+消息队列（Message Queue），字面意思是存放消息的队列。最简单的消息队列模型包括 3 个角色：
+
+- 消息队列：存储和管理消息，也称为消息代理（Message Broker）
+- 生产者：发送消息到消息队列
+- 消费者：从消息队列获取消息并处理消息
+
+Redis 提供了三种不同的方式来实现消息队列：
+
+- list 结构：基于 List 结构模拟消息队列
+- PubSub：基本的点对点消息模型
+- Stream：比较完善的消息队列模型
+
+#### 基于 List 结构模拟消息队列
+
+消息队列，字面意思就是存放消息的队列。而 Redis 的 list 数据结构是一个双向链表，很容易模拟出队列的效果
+
+队列是入口和出口不在一边，因此我们可以利用：`LPUSH` 结合 `RPOP`，或者 `RPUSH` 结合 `LPOP` 来实现
+
+当队列中没有消息可以 consume 的时候，要用 `BLPOP` 或 `BRPOP` 来实现阻塞等待
+
+优点
+
+- 利用 Redis 存储，不受限于 JVM 内存上限
+- 基于 Redis 持久化机制，数据安全性有保证
+- 可以满足消息有序性
+
+缺点
+
+- 无法避免消息丢失
+- 只支持单消费者
+
+#### 基于 PubSub 的消息队列
+
+PubSub 是 Redis 2.0 版本引入的消息传递模型。顾名思义，消费者可以订阅一个或多个 channel，生产者向对应 channel 发送消息后，所有订阅者都能收到相关消息
+
+- SUBSCRIBE channel [channel]：订阅一个或多个频道
+- PUBLISH channel msg: 向一个频道发送消息
+- PSUBSCRIBE pattern [pattern]：订阅与 pattern 相匹配的所有 channel
+
+优点
+
+- 采用发布订阅模型，支持多生产、多消费
+
+缺点
+
+- 不支持数据持久化
+- 无法避免消息丢失
+- 消息堆积有上限，超出时数据丢失
+
+#### 基于 Stream 的消息队列
+
+Stream 是 Redis 5.0 引入的一种新数据类型，可以实现一个功能非常完善的消息队列。
+
+STREAM 类型消息队列的 XREAD 命令特点：
+
+- 消息可回溯，读取之后消息不会被删除，会一直存在
+- 一个消息可以被多个消费者读取
+- 可以阻塞读取
+- 当我们指定起始 ID 为 `$` 时，代表读取最新消息，如果我们处理一条消息的过程中，又有超过 1 条以上的消息到达队列，则消磁获取时也只能获取到最新的一条，会出现漏读的问题
+
+#### 基于 Stream 的消息队列 - 消费者组
+
+消费者组（Consumer Group）将多个消费者划分到一个组中，监听同一个队列，具备以下特点：
+
+- 消息可回溯
+- 可以阻塞读取
+- 消息分流：队列中的消息会分流给组内的不同消费者，而不是重复消费，从而加快消息处理的速度（多消费者争抢消息）
+- 消息标识：消费者组会维护一个标识，记录最后一个被处理的消息，哪怕消费者宕机重启，还会从标识之后读取消息，确保每一个消息都会被消费
+- 消息确认：消费者获取消息后，消息处于 pending 状态，并存入一个 pending-list。当处理完成后需要通过 XACK 来确认消息，标记消息为已处理，才会从 pending-list 移除
+
+创建消费者组的命令：
+
+```shell
+XGROUP CREATE key groupName ID [MKSTREAM]
+```
+
+- key: 队列名称
+- groupName: 消费者组名称
+- ID: 起始 ID 标识，$ 代表队列中最后一个消息，0 则代表队列中第一个消息
+- MKSTREAM: 队列不存在时自动创建队列
+
+其他常见命令
+
+```shell
+# 删除指定的消费者组
+XGROUP DESTROY key groupName
+
+# 给指定的消费者组添加消费者
+XGROUP CREATECONSUMER key groupname consumername
+
+# 删除消费者组中的指定消费者
+XGROUP DELCONSUMER key groupname consumername
+```
+
+从消费者组读取消息
+
+![](/images/redis/action/voucher/read-consumer-group.png)
+
+Redis 消息队列三种模式对比
+
+![](/images/redis/action/voucher/compare.png)
+
+
