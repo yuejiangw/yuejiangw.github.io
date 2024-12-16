@@ -637,6 +637,8 @@ void setUp() {
 
 ## 异步秒杀
 
+> p69 - p77
+
 首先来回顾先前的秒杀流程
 
 ![](/images/redis/action/voucher/original-seckill.png)
@@ -663,6 +665,8 @@ void setUp() {
 - 数据安全问题：服务突然宕机了，内存中的所有信息都会丢失
 
 ### Redis 消息队列实现异步秒杀
+
+> p72 - p77
 
 消息队列（Message Queue），字面意思是存放消息的队列。最简单的消息队列模型包括 3 个角色：
 
