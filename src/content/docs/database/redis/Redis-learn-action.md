@@ -770,4 +770,42 @@ Redis 消息队列三种模式对比
 
 ![](/images/redis/action/voucher/compare.png)
 
+## 达人探店
+
+> p78 - P81
+
+### 发布探店笔记
+
+类似点评网站的评价，往往是图文结合，对应的表有两个
+
+- tb_blog：探店笔记表，包含笔记中的标题、文字、图片等
+- tb_blog_comments: 其他用户对探店笔记的评价
+
+![](/images/redis/action/explore/table-creation.png)
+
+### 点赞
+
+需求
+
+- 同一个用户只能点赞一次，再次点击则取消点赞
+- 如果当前用户已经点赞，则点赞按钮高亮显示（前端实现，判断字段 Blog 类的 isLike 属性）
+
+实现步骤
+
+1. 给 Blog 类中添加一个 isLike 字段，标识是否被当前用户点赞
+2. 修改点赞功能，利用 Redis 的 set 集合判断是否点赞过，未点赞过则点赞数 +1，已点赞过则点赞数 -1
+3. 修改根据 id 查询 blog 的业务，判断当前登录是否点赞过，赋值给 isLike 字段
+4. 修改分页查询 blog 业务，判断当前登录用户是否点赞过，赋值给 isLike 字段
+
+### 点赞排行榜
+
+基于 Redis 的 SortedSet 实现
+
+```shell
+# 存储
+ZADD key value score
+
+# 删除
+
+```
 
