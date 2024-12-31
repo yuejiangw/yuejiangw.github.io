@@ -47,12 +47,7 @@ export default defineConfig({
 				},
 				{
 					label: 'System Design',
-					items: [
-						{
-							label: '数据密集型应用',
-							autogenerate: { directory: 'system-design/ddia' },
-						}
-					]
+					autogenerate: { directory: 'system-design' },
 				},
 				{
 					label: 'Bug',
