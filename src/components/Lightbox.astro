@@ -1,0 +1,45 @@
+---
+const { src, alt } = Astro.props;
+---
+<div class="lightbox-container">
+  <img src={src} alt={alt} class="lightbox-thumbnail" onClick={() => {
+    const modal = document.querySelector(`.lightbox-modal[data-src="${src}"]`);
+    if (modal) modal.classList.add('open');
+  }} />
+  <div class="lightbox-modal" data-src={src} onClick={() => {
+    document.querySelector(`.lightbox-modal[data-src="${src}"]`).classList.remove('open');
+  }}>
+    <img src={src} alt={alt} />
+  </div>
+</div>
+
+<style>
+  .lightbox-container img {
+    cursor: pointer;
+    max-width: 100%;
+  }
+
+  .lightbox-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+
+  .lightbox-modal img {
+    max-width: 90%;
+    max-height: 90%;
+    border: 2px solid white;
+  }
+
+  .lightbox-modal.open {
+    display: flex;
+  }
+</style>

@@ -22,9 +22,9 @@ description: 黑马程序员 RabbitMQ 教程学习笔记
 
 ### 异步调用
 
-![](/images/rabbitmq/basic/async.png)
+![](/images/mq/basic/async.png)
 
-![](/images/rabbitmq/basic/async-architecture.png)
+![](/images/mq/basic/async-architecture.png)
 
 异步调用的优势和劣势与同步调用刚好是反过来的
 
@@ -43,7 +43,7 @@ description: 黑马程序员 RabbitMQ 教程学习笔记
 
 ## MQ 技术选型
 
-![](/images/rabbitmq/basic/selection.png)
+![](/images/mq/basic/selection.png)
 
 使用场景：
 
@@ -79,7 +79,7 @@ brew services start rabbitmq
 
 publisher 生产者发消息给 exchange (交换机)，exchange 负责将消息路由给 queue (队列)，consumer (消费者) 监听队列从而拿到消息
 
-![](/images/rabbitmq/basic/basic-concept.png)
+![](/images/mq/basic/basic-concept.png)
 
 交换机是负责路由和转发消息的，它本身没有存储消息的能力
 
@@ -87,35 +87,35 @@ publisher 生产者发消息给 exchange (交换机)，exchange 负责将消息�
 
 创建一个新的 queue
 
-![](/images/rabbitmq/basic/create-queue.png)
+![](/images/mq/basic/create-queue.png)
 
 exchange 绑定 queue
 
-![](/images/rabbitmq/basic/exchange-bind.png)
+![](/images/mq/basic/exchange-bind.png)
 
 Publish message
 
-![](/images/rabbitmq/basic/publish-message.png)
+![](/images/mq/basic/publish-message.png)
 
 Get message
 
-![](/images/rabbitmq/basic/get-message.png)
+![](/images/mq/basic/get-message.png)
 
 ## 数据隔离
 
 添加用户
 
-![](/images/rabbitmq/basic/add-user.png)
+![](/images/mq/basic/add-user.png)
 
 这里我们添加了一个名为 `hmall` 的管理员账户，尽管它可以看到我们在上一步骤中创建的 `hello.queue1` 和 `hello.queue2` 两个队列，但它却无权访问（get message 会出错）。这是因为上面两个队列是在不同的 virtual host 中创建的，可见 RabbitMQ 通过 Virtual Host 实现了数据隔离。
 
 创建虚拟主机（Virtual host）
 
-![](/images/rabbitmq/basic/add-virtual-host.png)
+![](/images/mq/basic/add-virtual-host.png)
 
 添加了新的 virtual host 之后我们再次查看 exchanges 页面，会发现这次会多出我们 virtual host 下的 exchange
 
-![](/images/rabbitmq/basic/all-exchange.png)
+![](/images/mq/basic/all-exchange.png)
 
 ## work模式
 
@@ -127,7 +127,7 @@ Get message
 
 修改 `application.yml`，设置 `preFetch` 值为 1， 确保同一时刻最多投递给消费者 1 条消息，实现能者多劳
 
-![](/images/rabbitmq/basic/preFetch.png)
+![](/images/mq/basic/preFetch.png)
 
 ## 交换机
 
@@ -144,11 +144,11 @@ Fanout Exchange 会将接收到的消息广播到每一个跟其绑定的 queue�
 
 #### Direct：定向
 
-![](/images/rabbitmq/basic/direct-exchange.png)
+![](/images/mq/basic/direct-exchange.png)
 
 #### Topic：话题
 
-![](/images/rabbitmq/basic/topic-exchange.png)
+![](/images/mq/basic/topic-exchange.png)
 
 Topic 交换机是最灵活的一种交换机，可以模拟 Direct 和 Fanout，并且可以使用通配符，如果不确定要使用哪种 exchange 则推荐使用 Topic
 
@@ -184,22 +184,22 @@ Direct 交换机与 Topic 交换机的差异
 
 常用类：
 
-![](/images/rabbitmq/basic/queue+exchange.png)
+![](/images/mq/basic/queue+exchange.png)
 
 基于 `@Configuration` 注解和 `@Bean` 注解声明和配置 Exchange，以 Fanout 为例：
 
-![](/images/rabbitmq/basic/exchange-sample.png)
+![](/images/mq/basic/exchange-sample.png)
 
 推荐使用基于 `@RabbitListener` 注解的方式来进行配置而不是使用 `@Bean` 进行依赖注入，后者在配置 Direct Exchange 的时候对于每个 Bean 每次只能指定一个 key，如果一个 Queue 要是想绑定多个 key 的话就要声明多个 Bean，比较麻烦
 
-![](/images/rabbitmq/basic/annotation-based-exchange-config.png)
+![](/images/mq/basic/annotation-based-exchange-config.png)
 
 ## MQ消息转换器
 
 Spring 中默认使用 JDK 自带的 ObjectOutputStream 进行序列化，因此如果我们想给 MQ 发送一个 Object，则会被 convert 成一个字节码序列
 
-![](/images/rabbitmq/basic/default-converter.png)
+![](/images/mq/basic/default-converter.png)
 
 解决：使用 JSON 序列化替代默认的 JDK 序列化
 
-![](/images/rabbitmq/basic/json-converter.png)
+![](/images/mq/basic/json-converter.png)

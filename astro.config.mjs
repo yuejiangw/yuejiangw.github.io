@@ -4,6 +4,13 @@ import starlight from '@astrojs/starlight';
 
 // https://astro.build/config
 export default defineConfig({
+	vite: {
+		resolve: {
+			alias: {
+				'@components': '/src/components',
+			}
+		}
+	},
 	site: 'https://yuejiangw.github.io',
 	integrations: [
 		starlight({
@@ -38,8 +45,8 @@ export default defineConfig({
 					]
 				},
 				{
-					label: 'Rabbit MQ',
-					autogenerate: { directory: 'rabbit-mq' },
+					label: 'Message Broker',
+					autogenerate: { directory: 'message-broker' },
 				},
 				{
 					label: 'Elasticsearch',

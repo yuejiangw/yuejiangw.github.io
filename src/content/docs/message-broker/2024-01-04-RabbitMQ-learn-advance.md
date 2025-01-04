@@ -10,11 +10,11 @@ description: 黑马程序员 RabbitMQ 教程学习笔记
 
 **生产者重连**
 
-![](/images/rabbitmq/advance/producer-retry.png)
+![](/images/mq/advance/producer-retry.png)
 
 **生产者确认**
 
-![](/images/rabbitmq/advance/producer-confirm.png)
+![](/images/mq/advance/producer-confirm.png)
 
 如何处理生产者的确认消息？
 
@@ -72,7 +72,7 @@ public void listenLazyQueue(String msg) {
 
 什么时候会 reject：消息本身是有问题的，consumer 处理的时候会报错
 
-![](/images/rabbitmq/advance/consumer-ack.png)
+![](/images/mq/advance/consumer-ack.png)
 
 ```txt
 spring:
@@ -136,7 +136,7 @@ public MessageConverter messageConverter() {
 
 结合业务逻辑，基于业务本身做判断
 
-![](/images/rabbitmq/advance/idempotence.png)
+![](/images/mq/advance/idempotence.png)
 
 ## 延迟消息
 
@@ -168,4 +168,4 @@ RabbitMQ 的官方也推出了一个插件，原生支持延迟消息的功能�
 
 解决：把一个长的延迟消息分成多个短的延迟消息，比如 10s, 10s, 10s, 15s, 15s, ..., 10min，这个延迟序列中前面的时间较短，后面的时间较长，从而保证大部分的消息可以在前面较短的时间内就被处理完
 
-![](/images/rabbitmq/advance/pay-status.png)
+![](/images/mq/advance/pay-status.png)
