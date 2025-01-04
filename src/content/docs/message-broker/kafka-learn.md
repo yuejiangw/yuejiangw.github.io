@@ -563,3 +563,59 @@ Kafka 会自动将 leader 均匀地分配在不同的 broker 中，如果一个 
 
 ![](/images/mq/kafka/storage.png)
 
+- Kafka 的数据组织结构
+  - topic
+  - partition
+  - segment
+    - .log 数据文件
+    - .index 稀疏索引
+    - .timeindex 根据时间做的索引
+- 深入了解读数据的过程
+  - 消费者的 offset 是一个针对 partition 全局 offset
+  - 可以根据这个 offset 找到 segment 段
+  - 接着需要将全局的 offset 转换为 segment 的局部 offset
+  - 根据局部的 offset，就可以从（.index 稀疏索引）找到对应的数据位置
+  - 开始顺序读取
+
+### 删除消息
+
+- 在 Kafka 中，消息是会被定期清理的，一次删除一个 segment 段的日志文件
+- Kafka 的日志管理器，会根据 Kafka 的配置，来决定哪些文件可以被删除
+
+### 消息不丢失机制
+
+- broker 数据不丢失：有副本 replica 的存在，会不断地从 leader 中同步副本，所以一个 broker crash，不会导致数据丢失，除非是只有一个副本
+- 生产者数据不丢失：生产者可以通过配置 ACK 来保证数据已经成功写入（ACK 配置成 all / -1）
+- 消费者数据不丢失：在消费者消费数据的时候，只要每个消费者记录好 offset 即可。
+  - At-least once：借助 ZooKeeper 来维护 offset，数据可能会重复消费
+  - Exactly-once：我们可以自己记录 offset（比如，借助 low-level API 来把 offset 存到 MySQL 中），通过事务来保证消息消费的 exactly-once
+
+### 数据积压
+
+Kafka 消费数据的速度是非常快的，但如果由于处理 Kafka 消息时，由于有一些外部 IO、或者是产生网络拥堵，就会造成 Kafka 中的数据积压（或者称为数堆积）。如果数据一直积压，会导致数据出来的实时性受到较大影响
+
+当 Kafka 出现数据积压问题时，首先要找到数据积压的原因，以下是几个企业中常见的数据积压场景：
+
+- 数据写入 MySQL 失败
+- 因为网络延迟消费失败
+
+### 数据清理
+
+Kafka 的消息存在磁盘中，为了控制磁盘占用空间，Kafka 需要定期进行日志清理。以下是 Kafka 提供的两种日志清理方式
+
+- 日志删除：按照指定的策略直接删除不符合条件的日志
+- 日志压缩：按照消息的 key 进行整合，有相同 key 的但有不同 value 值，只保留最后一个副本
+
+配置：
+
+- log.cleaner.enable
+  - 默认值：true，代表开启自动清理日志功能
+- log.cleanup.policy
+  - 默认值：delete，代表删除日志
+  - 可选配置1：compact，代表压缩日志
+  - 可选配置2：delete,compact：同时支持删除、压缩
+
+#### 日志删除
+
+以段（segment）为单位进行清理
+
