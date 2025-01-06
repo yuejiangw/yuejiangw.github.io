@@ -1,9 +1,6 @@
 ---
-layout: post
 title: Web Service Introduction
-categories: Java EE
 description: introduction for web service applications
-keywords: web, service
 ---
 
 ## What is web service?
