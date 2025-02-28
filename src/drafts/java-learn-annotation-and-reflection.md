@@ -6,7 +6,7 @@ description: Java 学习笔记之注解与反射
 keywords: Java, Learn
 ---
 
-> 课程链接：[bilibili](https://www.bilibili.com/video/BV1p4411P7V3/?vd_source=734a4a3d12292363fc3078169ddd7db2)
+> 课程链接：[bilibili](https://www.bilibili.com/video/BV1p4411P7V3/)
 
 # 注解
 
