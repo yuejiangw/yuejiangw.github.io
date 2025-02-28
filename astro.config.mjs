@@ -29,28 +29,15 @@ export default defineConfig({
 				},
 				{
 					label: 'Database',
-					items: [
-						{
-							label: 'MySQL',
-							autogenerate: { directory: 'database/mysql' },
-						},
-						{
-							label: 'MongoDB',
-							autogenerate: { directory: 'database/mongo' },
-						},
-						{
-							label: 'Redis',
-							autogenerate: { directory: 'database/redis' },
-						}
-					]
+					autogenerate: { directory: 'database/' }
 				},
 				{
 					label: 'Message Broker',
 					autogenerate: { directory: 'message-broker' },
 				},
 				{
-					label: 'Elasticsearch',
-					autogenerate: { directory: 'elasticsearch/' },
+					label: 'Frontend',
+					autogenerate: { directory: 'frontend/' },
 				},
 				{
 					label: 'System Design',

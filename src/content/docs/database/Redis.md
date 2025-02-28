@@ -1,10 +1,222 @@
 ---
-title: Redis 学习笔记 - 实战篇
-description: 黑马程序员 Redis 教程学习笔记
+title: Redis 学习笔记 
 ---
 
-> 课程链接：[bilibili](https://www.bilibili.com/video/BV1cr4y1671t?)
-> 
+> 课程链接：[blibili](https://www.bilibili.com/video/BV1cr4y1671t?)
+
+## 基础篇
+
+### Redis 介绍
+
+- 基于内存的 K / V 存储中间件
+- NoSQL 键值对数据库
+
+Redis 不仅仅是数据库，它还能作为消息队列等
+
+#### SQL 和 NoSQL 数据库对比
+
+注意使用场景的差异
+
+![](/images/redis/basic/SQL%20vs%20NoSQL.png)
+
+#### Redis 特征
+
+1. 支持多种数据结构
+2. 单线程，每个命令的执行具备原子性，中途不会执行其他命令（指命令的处理始终是单线程的，自 6.x 起改为多线程接受网络请求）
+3. 高性能，低延时（基于内存，IO 多路复用，良好编码）
+4. 支持数据持久化
+5. 支持主从、分片集群
+6. 支持多语言客户端
+7. 默认 16 个数据库，不能配置名字，只能配置数量
+
+### Redis 安装
+
+基于 Mac Homebrew 安装的命令为：
+
+```shell
+brew install redis
+```
+
+核心配置
+
+配置文件的位置在 `/opt/homebrew/etc/redis.conf`
+
+```shell
+# 允许任意 IP 访问
+bind 0.0.0.0
+
+# 后台启动 Redis 服务
+daemonize yes
+
+# 密码设置
+requirepass xxx
+```
+
+启动 Redis 服务
+
+```shell
+# 借助 Homebrew 启动 Redis 服务
+brew services start redis
+
+redis-server
+```
+
+查看 Redis 有没有成功启动
+
+```shell
+ps -ef | grep redis
+```
+
+关闭 Redis 服务
+
+```shell
+brew services stop redis
+```
+
+### 客户端连接 Redis
+
+通过命令行
+
+```shell
+# 1. 进入交互页面
+redis-cli
+
+# 2. 输入密码
+auth <password>
+
+# 3. 验证是否连接，如果成功连接会返回 PONG
+ping
+```
+
+### 常用命令
+
+命令集网站：http://www.redis.cn/commands.html
+
+通用命令
+
+- set key value
+- get key
+- keys pattern 模糊搜索多个 key，性能差（尤其主节点），生产环境不建议用
+- del key
+- exists key 判断 key 是否存在
+- expire key 设置过期时间，到期时候 ttl key 会返回 -2，同时该 key 会被删除
+- ttl key 查询剩余存活时间，未设置过期时间则为 -1 代表永久有效
+
+### Redis 基本数据结构
+
+![](/images/redis/basic/type.png)
+
+#### String 类型
+
+支持存储字符串、数字、浮点数（实际存储都是字节数组）
+
+![](/images/redis/basic/string%20format.png)
+
+单 key 的 value 最大不能超过 512 MB
+
+![](/images/redis/basic/common_command.png)
+
+实际使用时，通常用冒号连接多个词来拼接 key，比如 `[项目名]:[业务名]:[类型]:id`，在某些 GUI 工具中，会自动根据冒号来划分层级，浏览更方便。这个格式也并非固定，可以根据自己的需求来删除或添加词条。
+
+如果 Value 是一个 Java 对象，例如一个 User 对象，则可以将对象序列化为 JSON 字符串后存储。
+
+#### Hash 类型
+
+其 Value 是一个无序字典，类似于 Java 中的 HashMap 结构
+
+![](/images/redis/basic/Hash-type.png)
+
+常用命令
+
+> 其实就是在 String 命令名的基础上增加了 H 首字母
+
+![](/images/redis/basic/Hash-type-command.png)
+
+#### List 类型
+
+理解为 Java 的 LinkedList 双向链表，特点是有序、元素可以重复、插入删除快、查找性能一般
+
+常用命令
+
+> 有点像操作一个双端队列
+
+![](/images/redis/basic/List-type-command.png)
+
+#### Set 类型
+
+与 Java 中的 HashSet 类似，可以看做是一个 value 为 null 的 HashMap，因为也是一个哈希表，因此具备与 HashSet 类似的特征：
+
+- 无序
+- 元素不可重复
+- 查找快
+- 支持交集、并集、差集等功能
+
+常用命令
+
+![](/images/redis/basic/Set-type-command.png)
+
+#### SortedSet 类型
+
+可排序集合，与 Java 中的 TreeSet 有些相似，但底层数据结构差别很大。SortedSet 中的每一个元素都带有一个 score 属性，可以基于 score 属性对元素排序，底层的实现是一个跳表（SkipList）加哈希表。SortedSet 具有如下特性：
+
+- 可排序
+- 元素不重复
+- 查询速度快
+
+常用命令
+
+![](/images/redis/basic/SortedSet-type-command.png)
+
+### Redis 客户端
+
+#### 客户端对比
+
+可以在该网站查看所有客户端：https://redis.io/docs/connect/clients/
+
+对于 Java，推荐 `Jedis`，`Lettuce`，`Redisson` 三种客户端
+
+![](/images/redis/basic/java-client-compare.png)
+
+Spring Data Redis 同时兼容 Jedis 和 Lettuce
+
+#### Jedis 快速入门
+
+[代码](https://github.com/226wyj/redis-learn/tree/main/jedis-demo)
+
+基本使用步骤
+
+1. 引入依赖
+2. 创建 Jedis 对象，建立连接
+3. 使用 Jedis，方法名与 Redis 命令一致
+4. 释放资源
+
+#### SpringDataRedis
+
+[代码](https://github.com/226wyj/redis-learn/tree/main/springdata-redis-demo)
+
+![](/images/redis/basic/spring-data-redis-intro.png)
+
+Spring Data 整合封装了一系列数据访问的操作，Spring Data Redis 则是封装了对 Jedis、Lettuce 这两个 Redis 客户端的操作，提供了统一的 RedisTemplate 来操作 Redis。
+
+RedisTemplate 针对不同的 Redis 数据结构提供了不同的 API，划分更明确
+
+![](/images/redis/basic/redisTemplate.png)
+
+使用步骤
+
+1. 引入 spring-boot-starter-data-redis 依赖
+2. 在 application.yaml 配置 Redis 信息
+3. 注入 RedisTemplate
+
+**RedisTemplate 序列化**
+
+RedisTemplate 默认使用 JDK 原生序列化器，可读性差、内存占用大，因此可以用以下两种方式来改变序列化机制：
+
+1. 自定义 RedisTemplate，指定 key 和 value 的序列化器
+2. (推荐) 使用自带的 StringRedisTemplate, key 和 value 都默认使用 String 序列化器，仅支持写入 String 类型的 key 和 value，因此需要自己将对象序列化成 String 来写入 Redis，从 Redis 读取数据时也要手动反序列化
+
+## 实战篇
+
 > 项目：[黑马点评](https://github.com/yuejiangw/redis-learn/tree/main/hm-dianping)
 
 ![](/images/redis/action/intro.png)
@@ -13,7 +225,7 @@ description: 黑马程序员 Redis 教程学习笔记
 
 ![](/images/redis/action/architecture.png)
 
-## 共享 Session（单点登录）
+### 共享 Session（单点登录）
 
 > P24 - P34
 
@@ -69,7 +281,7 @@ Redis 代替 session 需要考虑的问题：
 
 ![](/images/redis/action/login/interceptor-optimization.png)
 
-## 缓存
+### 缓存
 
 > P35 - P47
 
@@ -88,7 +300,7 @@ Redis 代替 session 需要考虑的问题：
 - 代码维护成本
 - 运维成本
 
-### 实现
+#### 实现
 
 流程
 
@@ -114,14 +326,14 @@ Cache Aside 是最常用的方式
 操作缓存和数据库时有三个问题需要考虑：
 
 1. 删除缓存还是更新缓存
-   - 更新缓存：每次更新数据库都更新缓存，无效写操作较多 ❌
-   - 删除缓存：更新数据库时让缓存失效，查询时再更新缓存 ✅
+    - 更新缓存：每次更新数据库都更新缓存，无效写操作较多 ❌
+    - 删除缓存：更新数据库时让缓存失效，查询时再更新缓存 ✅
 2. 如何保证缓存与数据库的操作同时成功 / 失败？
-   - 单体系统，将缓存与数据库操作放在一个事务
-   - 分布式系统，利用 TCC 等分布式事务
+    - 单体系统，将缓存与数据库操作放在一个事务
+    - 分布式系统，利用 TCC 等分布式事务
 3. 先操作缓存还是先操作数据库？
-   - 先删除缓存，再操作数据库
-   - 先操作数据库，再删除缓存
+    - 先删除缓存，再操作数据库
+    - 先操作数据库，再删除缓存
 
 关于缓存和数据库的操作顺序，可能存在如下问题：
 
@@ -140,11 +352,11 @@ Cache Aside 是最常用的方式
 解决方案：
 
 - 缓存空值：缓存一个空值并设置 TTL
-  - 优点：实现简单，维护方便
-  - 缺点：额外的内存消耗、可能造成短期的不一致
+    - 优点：实现简单，维护方便
+    - 缺点：额外的内存消耗、可能造成短期的不一致
 - 布隆过滤：在客户端和 Redis 中间加一个布隆过滤器，每次查询前会询问过滤器数据是否存在，如果不存在会直接拒绝请求，阻止继续向下查询
-  - 优点：内存占用少，没有多余的 key
-  - 缺点：实现复杂、存在误判可能
+    - 优点：内存占用少，没有多余的 key
+    - 缺点：实现复杂、存在误判可能
 
 ![](/images/redis/action/cache/cache-penetration.png)
 
@@ -181,14 +393,14 @@ Cache Aside 是最常用的方式
 两种解决方案：
 
 - 互斥锁
-  - 只有一个线程会负责缓存重建，其他拿不到锁的线程必须等待
-  - 问题：性能比较差，同一时间只有一个线程可以进行缓存重建
-  - 借助 `setnx` 命令获取锁，成功返回 1，失败返回 0
-  - 借助 `del` 命令释放锁
+    - 只有一个线程会负责缓存重建，其他拿不到锁的线程必须等待
+    - 问题：性能比较差，同一时间只有一个线程可以进行缓存重建
+    - 借助 `setnx` 命令获取锁，成功返回 1，失败返回 0
+    - 借助 `del` 命令释放锁
 - 逻辑过期
-  - 在插入 Redis 的时候不设置 TTL，而是设置一个 expire 字段代表预计的过期时间（比如，可以设置为活动结束之后的 timestamp）
-  - 在查询 Redis 的时候由程序进行逻辑判断。如果发现缓存失效，则新开一个线程，获取互斥锁，进行缓存重建，同时返回过期结果
-  - 由于使用了互斥锁，因此同一时间只会有一个线程负责缓存重建，直接返回过期结果确保不会由线程阻塞引起性能低下
+    - 在插入 Redis 的时候不设置 TTL，而是设置一个 expire 字段代表预计的过期时间（比如，可以设置为活动结束之后的 timestamp）
+    - 在查询 Redis 的时候由程序进行逻辑判断。如果发现缓存失效，则新开一个线程，获取互斥锁，进行缓存重建，同时返回过期结果
+    - 由于使用了互斥锁，因此同一时间只会有一个线程负责缓存重建，直接返回过期结果确保不会由线程阻塞引起性能低下
 
 加锁 / 释放锁代码片段
 
@@ -214,9 +426,9 @@ private void unlock(String key) {
 
 ![](/images/redis/action/cache/cache-tool.png)
 
-## 优惠券秒杀
+### 优惠券秒杀及可能问题
 
-### 全局 ID 自增
+#### 全局 ID 自增
 
 每个店铺都可以发布优惠券，订单表如果使用数据库自增 ID 就会存在一些问题：
 
@@ -265,7 +477,7 @@ public long nextId(String keyPrefix) {
 }
 ```
 
-### 实现优惠券秒杀下单
+#### 实现优惠券秒杀下单
 
 下单时需要判断两点
 
@@ -274,7 +486,7 @@ public long nextId(String keyPrefix) {
 
 ![](/images/redis/action/voucher/workflow.png)
 
-### 超卖问题
+#### 超卖问题
 
 在高并发场景下，我们无法控制线程的执行顺序，从而会导致并发安全问题。
 
@@ -283,16 +495,16 @@ public long nextId(String keyPrefix) {
 超卖问题就是典型的多线程安全问题，针对这一问题常见的解决方案是加锁
 
 - 悲观锁 ❌
-  - 认为线程安全问题一定会发生，因此在操作数据之前先获取锁，确保线程串行执行
-  - 例如：synchronized, lock 都属于悲观锁
-  - 优点：简单粗暴
-  - 缺点：效率低，不适用于高并发场景
+    - 认为线程安全问题一定会发生，因此在操作数据之前先获取锁，确保线程串行执行
+    - 例如：synchronized, lock 都属于悲观锁
+    - 优点：简单粗暴
+    - 缺点：效率低，不适用于高并发场景
 - 乐观锁 ✅
-  - 认为线程安全问题不一定会发生，因此不加锁，只是在更新数据时去判断有没有其他线程对数据做了修改
-  - 如果没有修改则认为是安全的，自己才更新数据
-  - 如果已经被其他线程修改说明发生了安全问题，此时可以重试或异常
-  - 优点：性能好
-  - 缺点：成功率低，即使没有超卖也会发生扣减失败的情况
+    - 认为线程安全问题不一定会发生，因此不加锁，只是在更新数据时去判断有没有其他线程对数据做了修改
+    - 如果没有修改则认为是安全的，自己才更新数据
+    - 如果已经被其他线程修改说明发生了安全问题，此时可以重试或异常
+    - 优点：性能好
+    - 缺点：成功率低，即使没有超卖也会发生扣减失败的情况
 
 乐观锁的关键是判断之前查询得到的数据是否有被修改过，常见的方式有两种
 
@@ -300,9 +512,9 @@ public long nextId(String keyPrefix) {
 
 - 表中新增一列，为版本号，用来标识数据是否变化
 - 在查数据的同时查询版本号
-- 在扣减的之前判断当前版本号是否等于上一步中查询出来的版本号 
-  - 如果相等，说明没有其他线程影响，扣减库存并将版本号加1 
-  - 如果不相等，说明有其他线程早于自己对数据库进行了修改，需要丢弃后续操作
+- 在扣减的之前判断当前版本号是否等于上一步中查询出来的版本号
+    - 如果相等，说明没有其他线程影响，扣减库存并将版本号加1
+    - 如果不相等，说明有其他线程早于自己对数据库进行了修改，需要丢弃后续操作
 
 ![](/images/redis/action/voucher/version-number.png)
 
@@ -337,7 +549,7 @@ boolean success = seckillVoucherService.update()
 
 从判断库存是否相等，改为只限制库存大于 0 即可
 
-### 一人一单
+#### 一人一单
 
 需要修改业务逻辑，要求同一个优惠券，一个用户只能下一单
 
@@ -345,7 +557,7 @@ boolean success = seckillVoucherService.update()
 
 - 单机情况下，可以通过 `synchronized` 关键字来加锁
 - 集群情况下不行，锁的原理是在 JVM 内部维护了一个锁监视器，而集群环境下各个节点有自己独立的 JVM，所以在每个 JVM 的内部都会有一个线程是成功的
-  - 需要想办法实现跨 JVM（进程）的锁，也就是分布式锁
+    - 需要想办法实现跨 JVM（进程）的锁，也就是分布式锁
 
 ![](/images/redis/action/voucher/problem.png)
 
@@ -367,7 +579,7 @@ boolean success = seckillVoucherService.update()
 
 获取锁
 
-- 添加锁，利用 setnx 的互斥特性 
+- 添加锁，利用 setnx 的互斥特性
 - 添加锁过期时间，避免服务宕机引起的死锁
 - 上述两个步骤合在一起做保证原子性
 
@@ -413,8 +625,8 @@ public void unlock() {
 
 - 获取锁的时候要加入线程标识
 - 在释放锁的时候对线程 id 加以判断，确保释放的是自己申请的锁
-  - 还要保证判断和锁释放这两个过程是原子性的，否则有可能在判断结束释放锁之前的时间节点发生阻塞，而导致释放了其他线程的锁
-  - 实现：Lua 脚本（在一个脚本中编写多条 Redis 命令，确保多条命令执行时的原子性）
+    - 还要保证判断和锁释放这两个过程是原子性的，否则有可能在判断结束释放锁之前的时间节点发生阻塞，而导致释放了其他线程的锁
+    - 实现：Lua 脚本（在一个脚本中编写多条 Redis 命令，确保多条命令执行时的原子性）
 
 #### Lua 脚本
 
@@ -470,9 +682,9 @@ public void unlock() {
 }
 ```
 
-## 基于 Redis 的分布式锁的优化
+### 基于 Redis 的分布式锁的优化
 
-### 目前问题
+#### 目前问题
 
 **首先来回顾一下基于 Redis 实现分布式锁的基本思路**
 
@@ -492,11 +704,11 @@ public void unlock() {
 3. 超时释放：锁超时释放虽然可以避免死锁，但如果业务执行耗时较长，也会导致锁释放，存在安全隐患
 4. 主从一致性：如果 Redis 提供了主从集群，且主从同步存在延迟。极端情况下，一个线程在主节点上获取了锁之后主节点发生了宕机，但此时从节点还未同步主节点上的锁信息，从而可能导致其他线程也可以获取到锁
 
-### Redisson 简介
+#### Redisson 简介
 
 Redisson 是一个在 Redis 基础上实现的 Java 驻内存数据网格（in-memory data grid），它不仅提供了一系列的分布式的 Java 常用对象，还提供了许多分布式服务，其中就包含了各种分布式锁的实现
 
-添加依赖 
+添加依赖
 
 ```java
 <dependency>
@@ -635,7 +847,7 @@ void setUp() {
 }
 ```
 
-## 异步秒杀
+### 异步秒杀
 
 > p69 - p77
 
@@ -664,7 +876,7 @@ void setUp() {
 - 内存限制问题：阻塞队列存在于内存中，可存放的数据量受 JVM 内存的限制
 - 数据安全问题：服务突然宕机了，内存中的所有信息都会丢失
 
-### Redis 消息队列实现异步秒杀
+#### Redis 消息队列实现异步秒杀
 
 > p72 - p77
 
@@ -770,11 +982,11 @@ Redis 消息队列三种模式对比
 
 ![](/images/redis/action/voucher/compare.png)
 
-## 达人探店
+### 达人探店
 
 > p78 - P81
 
-### 发布探店笔记
+#### 发布探店笔记
 
 类似点评网站的评价，往往是图文结合，对应的表有两个
 
@@ -783,7 +995,7 @@ Redis 消息队列三种模式对比
 
 ![](/images/redis/action/explore/table-creation.png)
 
-### 点赞
+#### 点赞
 
 需求
 
@@ -797,7 +1009,7 @@ Redis 消息队列三种模式对比
 3. 修改根据 id 查询 blog 的业务，判断当前登录是否点赞过，赋值给 isLike 字段
 4. 修改分页查询 blog 业务，判断当前登录用户是否点赞过，赋值给 isLike 字段
 
-### 点赞排行榜
+#### 点赞排行榜
 
 基于 Redis 的 SortedSet 实现
 
@@ -808,4 +1020,3 @@ ZADD key value score
 # 删除
 
 ```
-

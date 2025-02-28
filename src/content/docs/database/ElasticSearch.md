@@ -1,23 +1,22 @@
 ---
-title: 基本概念
-description: A guide in my new Starlight docs site.
+title: ElasticSearch 学习笔记
 ---
 
 [Udemy Course Link](https://www.udemy.com/course/elasticsearch-complete-guide/)
 
-## **1. Basic Architecture**
+## Basic Architecture
 
-### **Node**
+### Node
 
 An instance of Elasticsearch that stores data. We can run as many nodes as we want, each node will store part of our data. In this way we can store data on multiple virtual or physical machines.
 
-### **Cluster**
+### Cluster
 
 Each node belongs to a cluster. A cluster is a collection of related nodes that together contain all of our data. You might run multiple clusters that serve different purposes.
 
 When a node starts up, it will either join an existing cluster if configured to do so, or it will create its own cluster consisting of just that node. An Elasticsearch node will always belong to a cluster.
 
-### **Document**
+### Document
 
 Each unit of data that you store within your cluster is called a document. Documents are JSON objects containing whatever data you desire.
 
@@ -25,36 +24,36 @@ When you index a document, the original JSON object that you sent to Elasticsear
 
 Documents are immutable.
 
-### **Index**
+### Index
 
 An index is a collection of documents that have similar characteristics and are logically related.
 
 Every document within Elasticsearch is stored within an index. An index groups documents together logically, as well as provide configuration options that are related to scalability and availability.
 
-### **Summary**
+### Summary
 
 * Nodes store the data that we add to Elasticsearch.
 * A cluster is a collection of nodes.
 * Data is stored as documents, which are JSON objects.
 * Documents are grouped together with indices.
 
-## **2. Sharding**
+## Sharding
 
-### **Introduction**
+### Introduction
 
 * Sharding is a way to divide indices into smaller pieces.
 * Each piece is referred to as a shard.
 * Sharding is done at the index level.
 * The main purpose is to horizontally scale the data volume.
 
-### **Purpose of sharding**
+### Purpose of sharding
 
 * Mainly to be able to store more documents.
 * To easier fit large indices onto nodes.
 * Improved performance.
     * Parallelization of queries increases the throughput of an index.
 
-### **Configure the number of shards**
+### Configure the number of shards
 
 * An index contains a single shard by default.
 * Indices in Elasticsearch \< 7.0.0 were created with five shards
@@ -62,15 +61,15 @@ Every document within Elasticsearch is stored within an index. An index groups d
 * Increase the number of shards with the Split API.
 * Reduce the number of shards with the Shrink API.
 
-## **3. Replication**
+## Replication
 
-### **Introduction**
+### Introduction
 
 * Hardware can fail at any time, so we need to handle that somehow.
 * Elasticsearch supports replication for fault tolerance. It is supported natively and enabled by default.
 * Replication is configured at the index level.
 
-### **Increase availability**
+### Increase availability
 
 * Replication works by creating copies of shards, referred to as replica shards
 * A shard that has been replicated, is called a ***primary shard***. A copy of the primary shard is called a ***replica shard***.
@@ -78,19 +77,19 @@ Every document within Elasticsearch is stored within an index. An index groups d
 * Replica shards are a complete copy of a shard, and can serve search requests, exactly like its primary shard.
 * The number of replicas can be configured at index creation.
 
-### **Increase query throughput**
+### Increase query throughput
 
 * Replica shards of a replication group can serve different search requests simultaneously.
 * Elasticsearch intelligently routes requests to the best shard.
 
-## **4. Snapshots**
+## Snapshots
 
 * Commonly used for daily backups
 * Manual snapshots may be taken before applying changes to data
 
-## **5. Node roles**
+## Node roles
 
-### **Master-eligible**
+### Master-eligible
 
 * The node may be elected as the cluster’s master node.
 * A master node is responsible for creating and deleting indices, among others.
@@ -99,7 +98,7 @@ Every document within Elasticsearch is stored within an index. An index groups d
 * May be used for having dedicated master nodes
     * Useful for large clusters
 
-### **Data**
+### Data
 
 * Enables a node to store data
 * Storing data includes performing queries related to that data, such as search queries.
@@ -107,7 +106,7 @@ Every document within Elasticsearch is stored within an index. An index groups d
 * Useful for having dedicated master does
 * Used as part of configuring a dedicated master node
 
-### **Ingest**
+### Ingest
 
 * Enables a node to run ingest pipelines
 * Ingest pipelines are a series of steps (processors) that are performed when indexing documents
@@ -115,26 +114,26 @@ Every document within Elasticsearch is stored within an index. An index groups d
 * A simplified version of Logstash, directly within Elasticsearch
 * This role is mainly useful for having dedicated ingest nodes
 
-### **Machine learning**
+### Machine learning
 
 * Node.ml identifies a node as a machine learning node
     * This lets the node run machine learning jobs
 * Xpack.ml.enabled enables or disables the machine learning API for the node
 
-### **Coordination**
+### Coordination
 
 * Coordination refers to the distribution of queries and the aggregation of results
 * Useful for coordination-only nodes (for large clusters)
 * Configured by disabling all other roles.
 
-### **Voting-only**
+### Voting-only
 
 * Rarely used, and you almost certainly won’t use it either
 * A node with this role, will participate in the voting for a new master node
 * The node cannot be elected as the master node itself, though
 * Only used for large clusters
 
-## **6. Optimistic Concurrency Control**
+## Optimistic Concurrency Control
 
 * Sending write requests to Elasticsearch concurrently may overwrite changes made by other concurrent processes.
 * Traditionally, the \_version field was used to prevent this.
@@ -142,7 +141,7 @@ Every document within Elasticsearch is stored within an index. An index groups d
 * Elasticsearch will reject the write operation if it contains the wrong primary term or sequence number.
     * This should be handled at the application level.
 
-## **7. Analyzer**
+## Analyzer
 
 ### **Character filters**
 

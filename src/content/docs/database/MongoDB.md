@@ -1,7 +1,8 @@
 ---
-title: 基本概念
-description: MongoDB权威指南学习笔记 - 1
+title: MongoDB 学习笔记
 ---
+
+## 基本概念
 
 - 文档是 MongoDB 中数据的基本单元，类似于关系型数据库中的行，但是 MongoDB 的文档可以包含更多层级的结构，这样可以更好地表示复杂的数据结构。
 - 集合可以被看作是 MongoDB 中的表，但是集合中的文档可以有不同的结构，这样可以更好地表示非结构化的数据。
@@ -38,7 +39,7 @@ description: MongoDB权威指南学习笔记 - 1
 
 集合中的文档可以有不同的结构，这样可以更好地表示非结构化的数据。例如，下面两个文档可以存在于同一个集合里面：
 
-```json
+```
 {"greeting": "Hello, World!"}
 {"foo": 5}
 ```
@@ -116,8 +117,11 @@ db.blog.insert(post);
 
 ```javascript
 db.blog.findOne()
+```
 
-// Result:
+返回结果如下
+
+```
 {
 	"_id" : ObjectId("6484ee3770ae4d11ad3fa9b4"),
 	"title" : "My blog post",
@@ -192,3 +196,202 @@ db.blog.remove({ title: "My blog post" });
 #### \_id 和 ObjectId
 
 MongoDB 会自动为每个文档添加 `_id` 字段，这个字段是文档的唯一标识符，可以用来查询文档。`_id` 字段的值可以是任意类型的，默认情况下是一个 `ObjectId` 对象，这个对象是由 12 个字节组成的，包含了创建文档的时间戳（0-3 字节）、客户端的机器 ID（4-6 字节）、客户端进程 ID（7-8 字节） 和随机数（9-11 字节）。
+
+## 增删改查
+
+### 创建文档
+
+使用 `insert` 插入一个文档是向 MongoDB 中添加数据的最基本的方法，`insert` 的参数是一个文档或者文档的数组，例如：
+
+```javascript
+db.foo.insert({ bar: "baz" });
+```
+
+如果插入的文档没有 `_id` 字段，MongoDB 会自动为文档添加一个 `_id` 字段，这个字段的值是一个 `ObjectId` 类型的值，这个值是 MongoDB 生成的一个 12 字节的唯一标识符，这个值在集合中是唯一的。
+
+如果要插入多个文档，使用批量插入会更快一些，因为一次批量插入只是单个的 TCP 请求，避免了许多零碎的请求所带来的开销。
+
+当执行插入的时候，使用的驱动程序会将数据转换成 `BSON` 形式，然后将其送入数据库。数据库解析 `BSON`，检验其是否包含 `_id` 键并且文档不超过 4MB，除此之外不做别的数据验证。
+
+### 删除文档
+
+删除文档使用 `remove` 方法，`remove` 方法的参数是一个查询文档，例如：
+
+```javascript
+db.foo.remove({ bar: "baz" });
+```
+
+如果不加参数，`remove` 方法会删除集合中的所有文档，但是不会删除集合本身，原有的索引也会保留。删除数据是永久性的，不能撤销也不可恢复。
+
+删除文档通常会很快，但是要清除整个集合，直接删除集合会更快一些。
+
+### 更新文档
+
+更新文档使用 `update` 方法，`update` 方法的参数是一个查询文档和一个要将匹配到的文档更新成的文档，例如：
+
+```javascript
+db.foo.update({ bar: "baz" }, { bar: "baz", zzz: "xxx" });
+```
+
+在这种情况下，`update` 方法会将匹配到的文档替换成新的文档，如果不想替换整个文档，可以使用 `$set` 操作符（update operator），例如：
+
+```javascript
+db.foo.update({ bar: "baz" }, { $set: { bar: "baz", zzz: "xxx" } });
+```
+
+`$set` 操作符会将指定的字段添加到文档中，如果文档中已经存在这个字段，那么就会更新这个字段的值。
+
+需要注意的一点是，如果只想更新文档中的一部分，那么一定要使用更新操作符，否则会将整个文档替换掉。
+
+这里我们可以看到，`update` 方法是比较危险的一个方法，稍有不慎就会把所有满足 filter 条件的原始数据给全部替换掉而不是单纯的更新其中一个部分。为了避免这种情况，我们可以使用 `updateOne` 和 `updateMany` 方法。在使用这两个方法的时候我们只能通过传入 update operators 来进行更新操作，不能单纯的传入一个 JSON object。例如：
+
+```javascript
+// 这里只会更新一条满足 filter 条件的数据
+db.foo.updateOne({ bar: "baz" }, { $set: { bar: "baz", zzz: "xxx" } });
+
+// 这里会更新所有满足 filter 条件的数据
+db.foo.updateMany({ bar: "baz" }, { $set: { bar: "baz", zzz: "xxx" } });
+```
+
+此外，如果我们想要真的执行替换操作，可以使用 `replaceOne` 方法，其写法与 `update` 方法类似，但更加安全，因为它只会替换一个满足条件的数据：
+
+```javascript
+// 这里会将满足 filter 条件的数据中的一条替换成后面的 JSON object
+db.foo.replaceOne({ bar: "baz" }, { bar: "baz", zzz: "xxx" });
+```
+
+对于更多相关的更新操作符，可以参考官方文档中的 [update operators](https://docs.mongodb.com/manual/reference/operator/update/) 部分。
+
+## 关系
+
+> 参考：[udemy](https://www.udemy.com/course/best-mongodb/)
+
+### 一对一关系
+
+假设我们有两个 collection，一个来存储 people，一个来存储 address，这两个 collection 中的数据具有一对一关系：
+
+people collection 中的数据如下所示，其中 `address` 字段的值对应是是 address collection 中数据的 `id` 字段
+
+```json
+{
+    "_id": 1,
+    "name": "John Cart",
+    "email": "jc@jc.com",
+    "phone": 12345,
+    "address": 1
+}
+```
+
+address collection 中的数据如下所示：
+
+```json
+{
+    "_id": 1,
+    "city": "Shanghai",
+    "street": "aaa",
+    "building": 1,
+    "room": 1021
+}
+```
+
+这样存储的话会有一个问题，就是我们想要获取 people collection 中的数据的话，要经过两次查询，第一次查 people，第二次查 address，效率比较低。为此，我们的解决办法是，将它们写在同一个 collection 内，新的数据格式如下：
+
+```json
+{
+    "_id": 1,
+    "name": "John Cart",
+    "email": "jc@jc.com",
+    "phone": 12345,
+    "address": {
+        "city": "Shanghai",
+        "street": "aaa",
+        "building": 1,
+        "room": 1021
+    }
+}
+```
+
+这样我们只需要一次查询就可以获取所需信息，也可以通过 projection 来筛选返回的 field，非常方便。
+
+### 一对多关系
+
+一对多关系也是我们生活中很常见的一种关系，假如我们想要表示一个人有多个订单，那么首先我们可以采用如下这种 schema：
+
+```json
+{
+    "_id": 1,
+    "name": "John Cart",
+    "email": "jc@jc.com",
+    "phone": 12345,
+    "orders": [
+        {
+            "date": "2018-12-10",
+            "product": "book",
+            "cost": 19.99
+        },
+        {
+            "date": "2018-12-13",
+            "product": "book",
+            "cost": 39.99
+        },
+        {
+            "date": "2018-12-12",
+            "product": "computer",
+            "cost": 2899
+        }
+    ]
+}
+```
+
+上面的这种存储方式可以作为一种选择，但它有一些问题：
+
+- 如果我们想要对所有订单进行处理的话，这种存储方式会比较困难，因为不同的人可能会有相同的订单，需要考虑去重
+- Mongo DB 中单个 document 的大小限制是 16 M，如果订单数量较多的话可能会使 document 体积过大
+
+为了解决上述两个问题，我们也可以把用户信息和订单信息拆分成两个 collection，使用 `id` 字段作为链接
+
+**people collection**
+
+```json
+{
+    "_id": 1,
+    "name": "John Cart",
+    "email": "jc@jc.com",
+    "phone": 12345,
+    "orders": [1, 2, 3]
+}
+
+```
+
+**order collection**
+
+```json
+[
+    {
+        "_id": 1,
+        "date": "2018-12-10",
+        "product": "book",
+        "cost": 19.99
+    },
+    {
+        "_id": 2,
+        "date": "2018-12-13",
+        "product": "book",
+        "cost": 39.99
+    },
+    {
+        "_id": 3,
+        "date": "2018-12-12",
+        "product": "computer",
+        "cost": 2899
+    }
+]
+```
+
+可以看到，我们将用户信息和订单信息分别存入了两个 collection 中，在用户信息中有一个 `orders` 字段，它的格式是一个 array，存储了所有该用户名下的订单的 `id`
+
+### 多对多
+
+以下面的订单关系为例，顾客和商品之间是多对多关系，我们采用的策略是通过一张中间表来表示这种关系，这里是订单表。如果选择将订单信息全部存入顾客表中，则可扩展性太差。
+
+![](/images/mongo/many-to-many.png)
