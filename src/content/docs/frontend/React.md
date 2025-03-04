@@ -446,3 +446,115 @@ function handleSelectSquare(rowIndex, colIndex) {
   })
 }
 ```
+
+## Styling React Apps
+
+### Vanilla CSS
+
+- 创建 CSS 文件并编写 CSS 样式
+- 在需要引入 CSS 的地方使用 `import` 语句引入 CSS 文件的相对路径，项目的构建工具（如 Vite、WebPack）会自动解析
+- 优点
+  - CSS code is decoupled from JSX code
+  - 如果你写过 CSS，那么非常简单直接
+  - CSS code can be written by another developer who needs only a minimal amount of access to your JSX code
+- 缺点
+  - You need to know CSS
+  - **Your styles are not scoped**, and CSS rules may clash across components (e.g., same CSS class name used in different components for different purposes)
+
+### CSS-in-JS with "Styled Components"
+
+使用 inline CSS 可以为 CSS Styles 添加 Scope。给 React 组件传入一个 `style` 属性，它接受一个 object 类型的参数，如：
+```jsx
+<p style={{
+  color: 'red', 
+  textAlign: 'left'
+}}>A community of artists and art-lovers.</p> 
+```
+
+优点
+
+- Quick & easy to add to JSX
+- Styles only affect the element to which you add them
+
+缺点
+
+- You need to know CSS
+- 复用性差
+- No separation between CSS & JSX code
+
+### Dynamic (Conditional) Styling
+
+在 inline CSS 中可以使用 JS 表达式来实现 conditional styling
+
+```jsx
+const emailNotValid = submitted && !enteredEmail.includes('@');
+
+<input
+  type="email"
+  style={{backgroundColor: emailNotValid ? '#fed2d2' : '#d1d5db'}}
+  onChange={(event) => handleInputChange('email', event.target.value)}
+/>
+```
+
+或者也可以采用下面的写法，借助 `className` 属性
+
+```jsx
+const emailNotValid = submitted && !enteredEmail.includes('@');
+
+<input
+  type="email"
+  className={emailNotValid ? 'invalid' : undefined}
+  onChange={(event) => handleInputChange('email', event.target.value)}
+/>
+```
+
+如果一个组件同时有很多 `className` 属性，并且你只想要动态渲染部分 `className`，那么可以采用 JS 动态拼接字符串的方法来实现
+
+```jsx
+const emailNotValid = submitted && !enteredEmail.includes('@');
+
+<label className={`label ${emailNotValid ? 'invalid' : ''}`}>Email</label> 
+```
+
+### Scoping Styles with CSS Modules
+
+Vanilla CSS with file-specific scoping ([Github link](https://github.com/css-modules/css-modules))
+
+CSS module is an approach, a solution, that in the end needs to be implemented and enforced by the build process that's used in your React project.
+
+使用步骤
+
+- 将你的 CSS 文件命名为 `xxx.module.css`，注意这个 `module` 后缀一定要加，会告诉构建工具你在使用 CSS module
+- 在 JSX 文件中，引入 CSS 样式
+  ```jsx
+  import classes from './Header.module.css'
+  ```
+- 在组件中借助引入的 `classes` 对象访问 CSS module
+  ```jsx
+  <p className={classes.paragraph}>Hello</p>
+  ```
+
+优点
+
+- CSS classes are scoped to the component (files) which import them -> No CSS class name clashes
+
+缺点
+
+- You may end up with many relatively small CSS files in your project
+
+### Tailwind CSS
+
+A CSS framework that can be used in any project ([official website](https://tailwindcss.com/))
+
+优点
+
+- You don't need to know a lot about CSS
+- Rapid development
+- No style clashes between components since you don't define any CSS rules
+- Highly configurable & extensible
+
+缺点
+
+- Relatively long className values
+- Any style changes require editing JSX
+- You end up with many relatively small "wrapper" components OR lots of copy & pasting
