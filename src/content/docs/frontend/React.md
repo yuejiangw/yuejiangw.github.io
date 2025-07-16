@@ -558,3 +558,98 @@ A CSS framework that can be used in any project ([official website](https://tail
 - Relatively long className values
 - Any style changes require editing JSX
 - You end up with many relatively small "wrapper" components OR lots of copy & pasting
+
+## Refs
+
+在 React 中，`useRef` 是一个 Hook，用于创建一个可变的引用对象。`ref`（引用）可以用来访问和操作 DOM 元素或 React 组件实例。
+
+`ref` 是一个对象，它包含一个 current 属性，该属性指向一个 DOM 元素或 React 组件实例。ref 对象在组件的整个生命周期内保持不变。
+
+使用 ref 的原因：
+
+- 访问 DOM 元素: `ref` 允许你直接访问和操作 DOM 元素，例如获取输入框的值、设置焦点、控制播放视频等。
+- 保存可变值: `ref` 可以用来保存一个在组件重新渲染时不会改变的可变值，例如计时器的 ID、前一个状态值等。
+- 与第三方库集成: `ref` 可以用来与需要直接操作 DOM 的第三方库集成，例如图表库、动画库等。
+
+### Example
+
+假如我们想要实现这样一个功能：在一个 `input box` 上面有一个标题，当我们在 `input box` 中输入一些文字并点击其旁边的 `button` 的时候，标题上面的文字会被设置成我们输入的内容
+
+如果基于 `useState` 和 two-way binding，实现方式如下：
+
+```jsx
+import {useState} from "react";
+
+const Demo = () => {
+  const [enteredValue, setEnteredValue] = useState(null);
+  const [submitted, setSubmitted] = useState(false);
+  
+  const handleChange = (event) => {
+    setSubmitted(false);
+    setEnteredValue(event.target.value)
+  }
+  
+  const handleClick = (event) => {
+    setSubmitted(true);
+  }
+          
+  return (
+    <>
+      <title>Welcome {submitted ? enteredValue : 'unkown entity'}</title>
+      <p>
+        <input value={enteredValue} onChange={handleChange} type={'text'} />
+        <button onClick={handleClick}>Submit</button>
+      </p>
+    </>
+  )
+}
+```
+
+通过上面的代码，你可以发现，这种写法有以下缺点：
+
+- 冗余：需要借助两个 `useState` 才能实现
+- 触发多次 component refresh：每次键入一个字符都会触发 `useState` 的更新操作，伴随的就是组件的刷新，浪费了性能
+
+如果使用 `ref`，代码如下：
+
+```jsx
+import {useRef, useState} from "react";
+
+const Demo = () => {
+  const inputRef = useRef();
+  const [enteredValue, setEnteredValue] = useState(null);
+  
+  const handleClick = (event) => {
+    setEnteredValue(inputRef.current.value);
+  }
+          
+  return (
+    <>
+      <title>Welcome {enteredValue ?? 'unkown entity'}</title>
+      <p>
+        <input ref={inputRef} type={'text'} />
+        <button onClick={handleClick}>Submit</button>
+      </p>
+    </>
+  )
+}
+```
+
+优点：
+
+- 简洁
+- `ref` 不会触发组件的刷新操作，节省资源
+
+### State vs Refs
+
+State
+
+- Causes component re-evaluation(re-execution) when changed
+- Should be used for values that are directly reflected in the UI
+- Should not be used for "behind the scenes" values that have no direct UI impact
+
+Refs
+
+- Do not cause component re-evaluation(re-execution) when changed
+- Can be used to gain direct DOM element access (=> great for reading values or accessing certain browser APIs)
+

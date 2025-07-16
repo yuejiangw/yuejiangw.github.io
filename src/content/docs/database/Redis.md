@@ -1011,12 +1011,416 @@ Redis 消息队列三种模式对比
 
 #### 点赞排行榜
 
-基于 Redis 的 SortedSet 实现
+基于 Redis 的 SortedSet 实现 (ZSET)
+
+Redis 的 SortedSet 是一个有序的集合，元素是唯一的，但可以有相同的分数（score），因此可以用来实现点赞排行榜
+
+判断当前用户是否已经点赞
 
 ```shell
-# 存储
-ZADD key value score
+ZADD key score member
+```
 
-# 删除
+取消点赞
+
+```shell
+ZREM key member
+```
+
+查询 top 5 点赞用户
+
+```shell
+ZREVRANGE key 0 4
+```
+
+#### 好友关注 + 共同关注
+
+> P82 - P83
+
+好友关注实现需要借助 Redis 的 Set 数据类型，共同关注则可以利用 Redis 的集合操作来实现，具体思路如下：
+
+1. 每个用户的关注列表可以用 Redis 的 Set 来存储，集合中的元素是用户 ID。
+2. 共同关注的用户可以通过集合的交集操作来获取，Redis 提供了 `SINTER` 命令来实现。
+
+```shell
+# 关注某个用户, 假设用户 1 关注用户 2
+SADD follows:user:1 user:2
+
+# 取消关注某个用户
+SREM follows:user:1 user:2
+
+# 获取共同关注的用户
+SINTER follows:user:1 follows:user:2
+``` 
+
+#### 关注推送（Feed流）
+
+> P84 - P85
+
+关注推送也叫 Feed 流，是指用户关注其他用户后，能够及时获取到被关注用户的最新动态。可以利用 Redis 的 List 数据结构来实现。
+
+Feed 流产品有两种常见模式：
+
+* Timeline 模式
+  * 不做内容筛选，简单的按照内容发布时间排序，常用于好友或关注列表
+  * 优点：实现简单，信息全面
+  * 缺点：信息噪音较多，用户可能会被大量不感兴趣的信息淹没
+* 智能排序
+  * 利用智能算法屏蔽掉违规的、用户不感兴趣的内容。推送用户感兴趣信息来吸引用户
+  * 优点：投喂用户感兴趣信息，用户粘度很高，容易沉迷
+  * 缺点：如果算法不精准，容易起到反作用
+
+实现方案 1 - 拉模式（读扩散）
+
+![](/images/redis/action/feed/pull.png)
+
+用户主动请求关注的人的最新动态，系统返回最新的动态信息。可以通过 Redis 的 List 数据结构来实现，具体步骤如下：
+
+1. 用户关注其他用户时，将关注者的 ID 存入被关注者的动态列表中。
+2. 用户请求动态时，从自己的关注列表中获取所有关注者的动态信息。
+3. 系统返回最新的动态信息给用户。
+
+优点：省内存，收件箱在读取消息之后就会被清空，所有消息只会保存在用户自己的发件箱中
+缺点：费时，每次读消息都要重新拉取发件箱的消息再做排序，如果关注的人很多，可能会导致请求时间过长
+
+```shell
+# 用户关注其他用户
+SADD follows:user:1 user:2
+
+# 用户请求动态
+LRANGE user:2:feed 0 -1
+```
+
+实现方案 2 - 推模式（写扩散）
+
+![](/images/redis/action/feed/push.png)
+
+```shell
+# 用户关注其他用户
+SADD follows:user:1 user:2
+
+# 用户发布动态
+LPUSH user:2:feed "新动态内容"
+```
+
+优点：实时性高，被关注者的消息会第一时间推送给关注者并排序
+缺点：内存占用高，被关注者的消息会写入每个关注者的收件箱中，可能会导致内存占用过大
+
+实现方案 3 - 混合模式（推拉结合）
+
+![](/images/redis/action/feed/push-pull.png)
+
+也叫读写混合，兼具推模式和拉模式的优点
+
+优点：对于活跃用户，使用推模式，实时性高；对于不活跃用户，使用拉模式，节省内存
+缺点：实现复杂，需要维护两种模式的逻辑
+
+三种方案对比
+
+![](/images/redis/action/feed/compare.png)
+
+Feed 流的滚动分页
+
+Feed 流中的数据会不断更新，所以数据的角标也在变化，因此不能采用传统的分页模式，需要使用 sorted set 来实现滚动分页
+
+#### 滚动分页查询
+
+参数
+
+- max：当前时间戳 | 上一次查询的最小时间戳
+- min：0 | 固定值
+- offset：0 | 在上一次的结果中，与最小值一样的元素的个数
+- count：固定值，表示每次查询的最大条数
+
+### 附近商户 - GEO 数据结构
+
+> P88 - P90
+
+GEO 数据结构是 Redis 3.2 版本引入的，用于存储地理位置信息。它可以存储经纬度坐标，并提供一些地理位置相关的操作，如计算距离、查找附近的地点等。
+
+常见的 GEO 命令包括：
+
+- GEOADD：添加地理位置数据，一个 key 可以添加多个地理位置（点）
+- GEODIST：计算两个地理位置之间的距离
+- GEOHASH：获取地理位置的哈希值
+- GEOPOS：获取指定成员的地理位置
+- GEORADIUS：查找指定半径内的地理位置
+- GEORADIUSBYMEMBER：查找指定成员周围的地理位置
+- GEOSEARCH：根据给定的地理位置查找附近的成员
+- GEOSEARCHSTORE：将搜索结果存储到新的键中
+
+**附近商户搜索功能实现思路**
+
+按照商户类型做分组，类型相同的商户作为同一组，以 typeId 为 key 存入同一个 GEO 集合中（比如，饭店分一类，超市分一类，KTV 分一类等）
+
+![](/images/redis/action/neighbor.png)
+
+导入店铺数据到 GEO
+
+```java
+void loadShopData() {
+    // 1. 获取所有店铺数据
+    List<Shop> shops = shopService.list();
+    // 2. 按照店铺类型分组
+    // 这里假设 Shop 类有 getTypeId() 方法返回店铺类型 ID
+    Map<Long, List<Shop>> shopMap = shops.stream()
+            .collect(Collectors.groupingBy(Shop::getTypeId));
+    // 2. 遍历店铺数据，导入到 GEO 中
+    for (Map.Entry<Long, List<Shop>> entry : shopMap.entrySet()) {
+        // 2.1 获取店铺类型 ID 和对应的店铺列表
+        Long typeId = entry.getKey();
+        String key = "shop:geo:" + typeId;
+        // 2.2 获取同一类型的店铺列表
+        List<Shop> shopList = entry.getValue();
+        List<GeoLocation<String>> locations = new ArrayList<>();
+        // 2.3 遍历店铺列表，构建 GeoLocation 对象
+        for (Shop shop : shopList) {
+            GeoLocation<String> location = new GeoLocation<>( 
+                shop.getId().toString(), 
+                new Point(shop.getX(), shop.getY())
+            );
+            locations.add(location);
+        }
+        // 2.4 将同一类型的店铺列表添加到 GEO 集合中
+        stringRedisTemplate.opsForGeo().add(key, locations);
+    }
+}
+```
+
+查询附近商户
+
+需要注意的是，GEOSEARCH 命令在 Redis 6.2 版本之后才支持，因此需要确保 Redis 版本满足要求，并且要更新 Spring Data Redis 版本到 2.4.0 或更高版本
+
+```java
 
 ```
+
+### 用户签到 - BitMap 数据结构
+
+> P91 - P93
+
+用户签到是指用户在特定时间段内访问应用或网站，系统记录用户的访问行为。签到可以用于激励用户活跃度、增加用户粘性等。
+
+数据量估算 - Why BitMap
+
+- 假如我们用一张表来存储用户签到信息，假设用户有 1000 万，每天签到一次，那么每天需要存储 1000 万条记录，一年需要存储 3.65 亿条记录，这样的存储量会非常大。
+- 如果使用 BitMap 数据结构，每个用户每天签到一次只需要 1 位来表示，1 个用户签到一个月只需要 2 字节（16 * 2 = 32 位），1000 万用户一年只需要 45 MB 的存储空间。
+
+#### BitMap 用法
+
+BitMap 是一种位图数据结构，可以用来高效地存储和查询大量的二进制数据。每一位代表一个状态，通常用于表示某个用户在某一天是否签到。把每一个 bit 位对应当月的每一天，形成了映射关系。Redis 中的 BitMap 通过 String 类型来实现的，最大上限是 512 M，转换为 bit 则是 2^32 个 bit 位。
+
+BitMap 的常用命令
+
+- `SETBIT key offset value`：设置指定偏移量的位值
+- `GETBIT key offset`：获取指定偏移量的位值
+- `BITCOUNT key`：计算位图中值为 1 的位数
+- `BITPOS key bit [start] [end]`：查找位图中第一个值为 bit 的位的位置
+- `BITFIELD key [GET type offset] [SET type offset value]`：对位图执行复杂的位操作
+- `BITFIELD_RO key [GET type offset]`：只读的位操作
+- `BITOP operation destkey key1 [key2 ...]`：对一个或多个 BitMap 执行位操作（AND、OR、XOR 等）
+- `BITPOS key bit [start] [end]`：查找位图中第一个值为 bit 的位的位置
+
+#### 用户签到实现
+
+BitMap 的底层是基于 String 的数据结构，因此其操作也都封装在字符串相关的操作中了
+
+我们想要把用户的 name + 日期作为 key，日期的天数作为 offset，签到状态作为 value 来实现用户签到功能，这样每个用户可以用一个长度为 31 的 BitMap 来表示一个月的签到情况
+
+```java
+public void sign(String name) {
+    // 1. 获取当前日期
+    LocalDate today = LocalDate.now();
+    // 2. 计算偏移量，今天是本月的第几天
+    int offset = today.getDayOfMonth() - 1;
+    // 3. 构建 key
+    String key = "sign:" + name + ":" + today.getMonthValue() + ":" + today.getYear();
+    // 4. 设置签到状态为 1
+    stringRedisTemplate.opsForValue().setBit(key, offset, true);
+}
+```
+
+#### 签到统计
+
+统计用户的签到情况可以通过 BitMap 的 `BITCOUNT` 命令来实现，计算 BitMap 中值为 1 的位数，即可得到用户的签到天数
+
+问题1：什么叫做连续签到天数？
+
+从最后一次签到开始向前统计，直到遇到第一次未签到的日期为止，计算总的签到天数i，就是连续签到天数
+
+问题2：如何得到本月到今天为止的所有签到数据？
+
+通过 `BITFIELD key GET u[dayOfMonth] 0` 命令
+
+问题3：如何从后向前遍历每个 bit 位？
+
+与 1 做与运算，就能得到最后一个 bit 位，随后右移 1 位，就能得到倒数第二个 bit 位，依次类推
+
+```java
+public int countContinuousSign(String name) {
+    // 1. 获取当前日期
+    LocalDate today = LocalDate.now();
+    // 2. 构建 key
+    String key = "sign:" + name + ":" + today.getMonthValue() + ":" + today.getYear();
+    // 3. 获取今天是本月的第几天
+    int dayOfMonth = today.getDayOfMonth();
+    // 4. 获取本月到今天为止的所有签到数据，返回的是一个十进制的数字
+    List<Long> bitMap = stringRedisTemplate.opsForValue().bitField(key, BitFieldSubCommands
+            .create()
+            .get(BitFieldSubCommands.BitFieldType.unsigned(dayOfMonth))
+            .valueAt(0));
+    if (bitMap == null || bitMap.isEmpty()) {
+        // 如果没有签到数据，返回 0
+        return 0;
+    }
+    // 5. 统计连续签到天数
+    int count = 0;
+    Long num = bitMap.get(0);
+    while (true) {
+        // 6. 判断当前位是否为 1
+        if ((num & 1) == 1) {
+            // 7. 如果是 1，则连续签到天数 +1
+            count++;
+        } else {
+            // 8. 如果是 0，则结束统计
+            break;
+        }
+        // 9. 将 num 右移一位，继续判断下一个 bit 位
+        num >>>= 1;
+    }
+    return count;
+} 
+```
+
+### UV 统计 - HyperLogLog 数据结构
+
+> P94 - P95
+
+#### HyperLogLog 用法
+
+首先我们搞懂两个概念：
+
+- UV：
+  - Unique Visitor，独立访客，指在一定时间范围内访问过网站的用户数量
+  - UV 统计的目的是为了了解网站的访问量和用户活跃度
+- PV：
+  - Page View，页面浏览量，指网站页面被访问的次数 
+
+UV 统计在服务端做会比较麻烦，因为要判断该用户是否已经统计过了。如果把所有数据都存入 Redis，那数据量会非常大，HyperLogLog 数据结构可以用来高效地统计 UV。
+
+HyperLogLog 是从 Loglog 算法派生的概率算法，用于确定非常大的集合的基数，而不需要存储其所有值。Redis 中的 HLL 是基于 string 结构实现的，单个 HLL 的内存永远小于 16 kb，内存占用低。作为代价，其测量结果是概率性的，有小于 0.81% 的误差率。不过对于 UV 统计来说，这个误差率是可以接受的。
+
+对应的 Redis 命令有：
+- `PFADD key element [element ...]`：添加元素到 HyperLogLog 中
+- `PFCOUNT key [key ...]`：计算 HyperLogLog 中的基数
+- `PFMERGE destkey sourcekey [sourcekey ...]`：合并多个 HyperLogLog 到一个新的 HyperLogLog 中
+
+#### 实现 UV 统计
+
+可以利用单元测试，向 HLL 中添加 100 万条数据，看看内存占用情况（使用 `info memory` 命令查看内存占用）
+
+```java
+@Test
+void testHyperLogLog() {
+    String key = "uv:test";
+    String[] values = new String[1000];
+    // 添加 100 万条数据
+    int j = 0;
+    for (int i = 0; i < 1000000; i++) {
+      j = i % 1000; // 每 1000 个数据重复一次
+      values[j] = "user:" + i;
+      if (j == 999) {
+        // 每 1000 个数据添加一次
+        stringRedisTemplate.opsForHyperLogLog().add(key, values);
+      }
+    }
+    // 计算 UV
+    Long count = stringRedisTemplate.opsForHyperLogLog().size(key);
+    System.out.println("UV count: " + count);
+    // 查看内存占用
+    String memoryInfo = stringRedisTemplate.execute((RedisConnection connection) -> {
+        return connection.info("memory");
+    });
+    System.out.println("Memory info: " + memoryInfo);
+}
+```
+
+## 高级篇
+
+### 分布式缓存
+
+> P96 - P112
+
+单节点 Redis 问题
+
+- 数据丢失 - 单节点 Redis 宕机，数据丢失，服务不可用
+- 并发能力 - 无法满足高并发场景下的读写请求
+- 故障恢复 - 如果 Redis 宕机，则服务不可用，需要一种自动恢复的机制
+- 存储能力 - Redis 基于内存，单节点能存储的数据量有限
+
+解决
+
+- 数据丢失 - 实现数据持久化
+- 并发能力 - 实现 Redis 集群
+- 故障恢复 - 实现 Redis 主从复制
+- 存储能力 - 实现 Redis 分片，利用插槽机制实现动态扩容
+
+#### Redis 持久化
+
+##### RDB 持久化
+
+RDB（Redis Database）是 Redis 的默认持久化方式，它会在指定的时间间隔内将内存中的数据快照保存到磁盘上。RDB 文件是二进制格式的，通常以 `.rdb` 结尾。当 Redis 实例故障重启后，从磁盘读取快照文件，恢复数据。快照文件称为 RDB 文件，默认是保存在当前运行目录。
+
+Redis CLI 中有两个命令可以用来做持久化：
+
+- save：阻塞当前线程，直到持久化完成，适用于服务器停机时的持久化
+- bgsave：在后台进行持久化，不会阻塞当前线程，适用于定时持久化
+
+RDB 方案默认是开启的，他会在 Redis 服务器停机的那一刻触发 save 命令完成一次持久化。我们也可以在 `redis.conf` 文件中配置 RDB 的持久化策略，格式如下：
+
+```conf
+save <seconds> <changes>
+```
+
+这里的 save 是 bgsave，是在后台进行的持久化，命令表示在指定的秒数内，如果有多少次数据变更，则触发一次后台持久化
+
+**RDB 原理**
+
+bgsave 开始时会 fork 主进程得到子进程，子进程共享主进程的内存数据。完成 fork 后读取内存数据并写入 RDB 文件。
+
+fork 采用的是 copy-on-write 的技术
+
+- 当主进程执行读操作时，访问共享内存
+- 当主进程执行写操作时，则会拷贝一份数据，执行写操作
+
+![](/images/redis/advance/rdb.png)
+
+**RDB 的缺点**
+
+- 数据丢失：RDB 只会在指定的时间间隔内进行持久化，如果在这个时间间隔内发生了故障，则可能会丢失最近的修改数据
+- 耗时：fork 子进程、压缩、写出 RDB 文件都比较耗时
+
+##### AOF 持久化
+
+AOF （Append Only File）是 Redis 的另一种持久化方式，它会将每次对 Redis 数据库的写操作记录到一个日志文件中。AOF 文件是一个文本文件，记录了所有的写操作命令。当 Redis 实例重启时，可以通过执行 AOF 文件中的命令来恢复数据。
+
+AOF 默认是关闭的，可以在 `redis.conf` 文件中配置 AOF 的持久化策略，格式如下：
+
+```conf
+# 是否开启 AOF 持久化，默认是 no
+appendonly yes
+# AOF 文件名
+appendfilename "appendonly.aof"
+# AOF 同步策略
+appendfsync always | everysec | no
+```
+
+- appendonly yes：开启 AOF 持久化
+- appendfsync always：每次写操作都同步到磁盘，性能较低
+- appendfsync everysec：每秒同步一次到磁盘，性能较高，这是默认值
+- appendfsync no：不进行同步，性能最高，但数据安全性较低
+
+![](/images/redis/advance/aof.png)
+
+**AOF 原理**
+

@@ -1,9 +1,12 @@
 ---
 title: Kafka 学习笔记
-description: 黑马程序员 Kafka 教程学习笔记
+description: Kafka 教程学习笔记
 ---
 
-课程链接：[bilibili](https://www.bilibili.com/video/BV19y4y1b7Uo/?share_source=copy_web&vd_source=efa6e05f72a153245e41800c27eab04a)
+课程链接
+
+- [bilibili](https://www.bilibili.com/video/BV19y4y1b7Uo/?share_source=copy_web&vd_source=efa6e05f72a153245e41800c27eab04a)
+- [Udemy](https://www.udemy.com/course/apache-kafka-for-developers-using-springboot)
 
 ## 消息队列简介
 
@@ -80,14 +83,38 @@ Apache Kafka 是一个分布式流平台，包含 3 点关键能力
 
 ![](/images/mq/kafka/use-case.png)
 
-关于上图，我们可以看到
+关于上图，我们可以看到，Kafka 有以下 4 种 client API，分别对应了 4 种应用场景
 
-- Producers：可以有很多的应用程序，将消息数据放入到 Kafka 集群中
-- Consumers：可以有很多应用程序，将消息数据从 Kafka 集群中拉取出来
-- Connector：Kafka 的连接器可以将数据库中的数据导入到 Kafka，也可以将 Kafka 的数据导出到数据库中
-- Stream Processors：流处理器可以从 Kafka 中拉取数据，也可以将数据写入到 Kafka 中
+- Producers API：可以有很多的应用程序，将消息数据放入到 Kafka 集群中
+- Consumers API：可以有很多应用程序，将消息数据从 Kafka 集群中拉取出来
+- Connect API：Kafka 的连接器可以将数据库中的数据导入到 Kafka (Source Connector)，也可以将 Kafka 的数据导出到数据库中 (Sink Connector)
+- Stream API：流处理器可以从 Kafka 中拉取数据，进行操作 (transformations) 之后将数据再写回到 Kafka 中
+
+下图直观地展示了四种 client API 的使用场景
+
+![](/images/mq/kafka/client-api.png)
+
+### Kafka v.s. Traditional messaging system
+
+Traditional Messaging system
+
+- Transient Message Persistence
+- Brokers responsibility to keep track of consumed messages
+- Target a specific Consumer
+- Not a distributed system
+
+Kafka
+
+- Stores events based on a retention time. Events are immutable
+- Consumers Responsibility to keep track of consumed messages
+- Any consumer can access a message from the broker
+- It's a distributed streaming system
 
 ### Kafka 集群搭建
+
+之前介绍过，Kafka 是一个 distributed system
+
+![](/images/mq/kafka/distributed-system.png)
 
 配置修改
 
@@ -256,7 +283,7 @@ public class KafkaProducerTest {
 
 ### Kafka 中的重要概念
 
-#### broker
+#### Broker
 
 - 一个 kafka 的集群通常由多个 broker 组成，这样才能实现负载均衡、以及容错
 - broker 是无状态的，它们是通过 Zookeeper 来维护集群状态
@@ -264,22 +291,22 @@ public class KafkaProducerTest {
 
 ![](/images/mq/kafka/broker.png)
 
-#### zookeeper
+#### Zookeeper
 
 - 用来管理和协调 broker，并且存储了 Kafka 的元数据（例如，有多少 topic、partition、consumer）
 - 主要用于通知生产者和消费者 kafka 集群中有新的 broker 加入、或者 Kafka 集群中出现故障的 broker
 
 PS: Kafka 正在想办法将 Zookeeper 剥离，维护两套集群成本较高，社区提出 KIP-500 就是要替换掉 ZooKeeper 的依赖 - Kafka on Kafka
 
-#### producer
+#### Producer
 
 - 生产者负责将数据推送给 broker 的 topic
 
-#### consumer
+#### Consumer
 
 - 消费者负责从 broker 的 topic 中拉取数据，并自己处理
 
-#### consumer group
+#### Consumer group
 
 - 消费者组是 Kafka 提供的可扩展且具有容错性的消费者机制
 - 一个消费者组可以包含多个消费者
@@ -289,13 +316,21 @@ PS: Kafka 正在想办法将 Zookeeper 剥离，维护两套集群成本较高�
 
 ![](/images/mq/kafka/consumer-group.png)
 
-#### 分区（partition）
+#### 分区（Partition）
 
 - 在 Kafka 集群中，主题被分为多个分区
+- Partition is where the message lives inside the topic
+- Each topic will be created with one or more partitions
+- Each partition is an ordered, immutable sequence of records (有序、不可变)
+- Each record is assigned a sequential number called offset
+- Each partition is independent of each other
+- Ordering is guaranteed only at the partition level
+- Partition continuously grows as new records are produced
+- All the records are persisted in a commit log in the file system where Kafka is installed
 
 ![](/images/mq/kafka/partition.png)
 
-#### 副本（replica）
+#### 副本（Replica）
 
 - 副本可以确保某个服务器出现故障时，确保数据依然可用
 - 在 kafka 中，一般设计副本数 > 1
@@ -304,6 +339,7 @@ PS: Kafka 正在想办法将 Zookeeper 剥离，维护两套集群成本较高�
 
 #### 主题（Topic）
 
+- Topic is an entity in Kafka with a name
 - 主题是一个逻辑概念，用户生产者发布数据，消费者拉取数据
 - Kafka 中的主题必须要有标识符，而且是唯一的，Kafka 中可以有任意数量的主题，没有数量上的限制
 - 在主题中的消息是有结构的，一般一个主题包含某一类消息
@@ -314,17 +350,45 @@ PS: Kafka 正在想办法将 Zookeeper 剥离，维护两套集群成本较高�
 #### 偏移量（Offset）
 
 - Offset 记录着下一条将要发送给 Consumer 的消息序号
-- 默认 Kafka 将 offset 存储在 ZooKeeper 中（也可以配置存储其他地方如 Redis，但默认是放在 ZooKeeper 中）
+- 在早期版本的 Kafka 中（0.9 之前），默认 Kafka 将 offset 存储在 ZooKeeper 中（也可以配置存储其他地方如 Redis，但默认是放在 ZooKeeper 中）
+- 在现代版本的 Kafka 中（0.10 之后），offset 会存在一个名为 `__consumer_offsets` 的内部 topic 中
 - 在一个分区中，消息是有顺序的方式存储着，每个在分区的消费都是有一个递增的 id，这个就是偏移量 offset
 - 偏移量在分区中才是有意义的，在分区之间，offset 是没有任何意义的
 
 ![](/images/mq/kafka/offset.png)
 
+### Commit Log & Retention Policy
+
+Kafka 的一个特点是可以将 records 保留一段时间而不是在被消费者消费之后就立刻丢弃，实现这一机制的方式就是 commit log + retention policy
+
+#### Commit Log
+
+![](/images/mq/kafka/commit-log.png)
+
+每当 Producer 生成一条 record 并送入 Broker 中对应的 Topic 之后，这条 record 会被写入 Kafka Broker 所被安装的 machine 上的 file system 中。
+所写入的 log 文件路径可以在 `server.properties` 文件中的 `log.dirs` 属性中进行配置，该 log 文件以 `.log` 结尾，每个 partition 都会有自己的 log 文件。
+当 record 被写入这个 log 文件中后，代表该 record 被 produced and committed。对于 consumer 来说，它只能读取已经被 commit 的 record。对于 producer,
+新产生的 record 会以追加的形式继续写入 log 文件
+
+![](/images/mq/kafka/log-dir.png)
+
+#### Retention Policy
+
+- 用来决定存储 record 的时间长短
+- Configured using the property `log.retention.hours` in `server.properties` file
+- Default is 168 hours (7 days)
+
+![](/images/mq/kafka/retention-policy.png)
+
 ### 消费者组
 
-- 一个消费者组中可以包含多个消费者，共同来消费 topic 中的数据
+- Consumer Groups are used for scalable message consumption
+- Each different application will have a unique consumer group
+- Kafka broker manages the consumer groups, and it acts as a group coordinator
+- 一个消费者组中可以包含多个消费者，共同来消费 topic 中的数据，consumer pool 是单线程的
 - 一个 topic 中如果只有一个分区，那么这个分区只能被某个组中的一个消费者消费
 - 有多少个分区，那么就可以被同一个组内的多少个消费者消费
+- 需要提供 `group.id` 作为消费者组的标识
 
 ## Kafka 生产者幂等性与事务
 
@@ -351,10 +415,22 @@ PS: Kafka 正在想办法将 Zookeeper 剥离，维护两套集群成本较高�
 
 ### 生产者分区写入策略
 
+一条 Kafka 消息具有以下两个属性：
+
+- Key (optional)
+- Value
+
+Key 是可选值，Value 是必选值，是否提供 Key 会影响该 message 最后被送入哪个 partition，该步骤是由 partitioner 来决定的
+
+如果未提供 key，那么 partitioner 就会 以 round robin 的方式把 message 依次送到空闲的 partition 中。需要注意的是，Kafka 只保证同一个 partition 内的 records 是有序的，
+无法保证 consumer 从各个 partition 读到的结果的整体的顺序与 producer 发送的顺序是一致的，因为 consumer 在读消息的时候是同时从各个 partition 拉取消息的
+
+如果提供了 key，那么 partitioner 会通过某种方式对 key 进行计算（比如求哈希值）来作为寻找对应 partition 的依据
+
 #### 1 - 轮询
 
 - 默认的策略，也是使用最多的策略，可以最大限度保证所有消息平均分配到一个分区
-- 如果在生产消息时，key 为 null，则使用轮询算饭均衡地分配分区
+- **如果在生产消息时，key 为 null，则使用轮询算饭均衡地分配分区**
 
 ![](/images/mq/kafka/round-robin.png)
 
@@ -374,6 +450,14 @@ PS: Kafka 正在想办法将 Zookeeper 剥离，维护两套集群成本较高�
 > - 按 key 分区可以一定程度上实现数据有序存储 —— 也就是局部有序，但这又可能会导致数据倾斜，所以在实际生产环境中要结合实际情况来做取舍。
 
 ![](/images/mq/kafka/order.png)
+
+### 消费者读取策略
+
+消费者有三种读取策略
+
+- from beginning
+- latest
+- specific offset
 
 ### 消费者组的 rebalance 机制
 
