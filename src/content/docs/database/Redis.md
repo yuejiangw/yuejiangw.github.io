@@ -1422,5 +1422,17 @@ appendfsync always | everysec | no
 
 ![](/images/redis/advance/aof.png)
 
-**AOF 原理**
+因为是记录命令，AOF 文件会比 RDB 文件大得多，而且 AOF 会记录对同一个 key 的多次写操作，但只有最后一次写操作才有意义。通过 bgrewriteaof 命令可以对 AOF 文件进行重写，删除多余的命令，只保留最新的命令。重写过程是通过 fork 子进程来实现的，子进程会读取当前内存数据并生成新的 AOF 文件。
 
+Redis 也会在触发阈值时自动进行 AOF 重写，阈值可以在 `redis.conf` 文件中配置，格式如下：
+
+```conf
+# AOF 重写触发阈值，当 AOF 文件比上次文件增长超过指定百分比时触发重写
+auto-aof-rewrite-percentage <percentage>
+# AOF 文件体积最小多大以上才触发重写
+auto-aof-rewrite-min-size <size>
+```
+
+##### AOF vs RDB
+
+![](/images/redis/advance/aof-vs-rdb.png)
